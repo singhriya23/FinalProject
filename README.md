@@ -9,5 +9,6 @@ Codelabs - https://codelabs-preview.appspot.com/?file_id=1XNpOEtCW3dAiag4ingQZ21
 
 ## Architecture Diagram
 
-![image](https://github.com/user-attachments/assets/32f02a97-4c03-44e6-8f51-0866e1a37dba)
+![image (1)](https://github.com/user-attachments/assets/43b0f742-393d-4b7d-a061-a5aa58a20527)
+
 
