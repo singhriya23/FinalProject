@@ -1,0 +1,4 @@
+Agents/.env
+*.csv
+*.zip
+*.pdf
