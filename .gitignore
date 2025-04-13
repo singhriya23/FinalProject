@@ -4,3 +4,4 @@ Agents/.env
 *.pdf
 /__pycache__
 .env
+*.md
