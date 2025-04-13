@@ -3,3 +3,4 @@ Agents/.env
 *.zip
 *.pdf
 /__pycache__
+.env
