@@ -1,4 +1,3 @@
-# file: retriever_only.py
 import os, json
 from dotenv import load_dotenv
 from typing import List
@@ -37,18 +36,21 @@ class PineconeLangChainRetriever(BaseRetriever):
     async def aget_relevant_documents(self, query: str) -> List[Document]:
         return self.get_relevant_documents(query)
 
-# Just the retriever logic
 retriever = PineconeLangChainRetriever(index)
 
-def save_retriever_output(query: str, docs: List[Document], path="retriever_output.json"):
+def get_retriever_output(query: str) -> List[dict]:
+    docs = retriever.get_relevant_documents(query)
+    results = [{"text": doc.page_content, "metadata": doc.metadata} for doc in docs]
+    return results
+
+def save_retriever_output(query: str, docs: List[dict], path="retriever_output.json"):
     with open(path, "w") as f:
-        json.dump({
-            "query": query,
-            "results": [{"text": d.page_content, "metadata": d.metadata} for d in docs]
-        }, f, indent=2)
+        json.dump({"query": query, "results": docs}, f, indent=2)
 
 if __name__ == "__main__":
     user_query = input("Enter query: ")
-    docs = retriever.get_relevant_documents(user_query)
-    save_retriever_output(user_query, docs)
-    print(f"✅ Retrieved and saved {len(docs)} docs.")
+    output = get_retriever_output(user_query)
+    save_retriever_output(user_query, output)
+    print("\n📄 Output (List[dict]):")
+    print(output)
+    print(f"\n✅ Retrieved and saved {len(output)} docs.")

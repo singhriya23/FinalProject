@@ -2,3 +2,4 @@ Agents/.env
 *.csv
 *.zip
 *.pdf
+/__pycache__
