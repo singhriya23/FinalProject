@@ -1,78 +1,71 @@
-from langchain.agents import Tool, initialize_agent
+from typing import Dict, List
+import asyncio
+from langchain_community.utilities import GoogleSerperAPIWrapper
 from langchain_openai import ChatOpenAI
-from langchain_community.tools.tavily_search.tool import TavilySearchResults
-from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import RunnableLambda
-from dotenv import load_dotenv
 import os
-from typing import List, Dict
+from dotenv import load_dotenv
 
 load_dotenv()
 
-# Initialize GPT-3.5
-llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.3)
+class WebSearchRecommender:
+    def __init__(self):
+        self.search = GoogleSerperAPIWrapper(
+            serper_api_key=os.getenv("SERPER_API_KEY"),
+            k=7  # Get more results for GPT to analyze
+        )
+        self.llm = ChatOpenAI(model="gpt-4-turbo")  # Using more capable model
 
-# Tavily search tool
-tavily_tool = TavilySearchResults(k=4, tavily_api_key=os.getenv("TAVILY_API_KEY"))
-
-# Optional: LLM summarization prompt for polishing Tavily results
-summary_prompt = PromptTemplate.from_template(
-    """
-You are an expert assistant. Summarize the search results below into 3–5 bullet points.
-Focus on college name, tuition, and specialization in Artificial Intelligence. Be concise and helpful.
-
-Search Results:
-{raw_results}
-
-Summary:
-"""
-)
-
-# Chain: LLM + prompt → final clean output
-summarize_chain = summary_prompt | llm
-
-# This tool wraps Tavily + LLM summarization
-def search_and_summarize(user_prompt: str) -> str:
-    raw_results = tavily_tool.run(user_prompt)
-    summary = summarize_chain.invoke({"raw_results": raw_results})
-    return [line.strip("• ").strip() for line in summary.content.split("\n") if line.strip()]
-
-# LangChain tool wrapper
-tools = [
-    Tool.from_function(
-        func=search_and_summarize,
-        name="Web Search",
-        description="Use this to find recent college rankings, tuition, and programs based on the user prompt"
-    )
-]
-
-# Agent setup
-websearch_agent = initialize_agent(
-    tools=tools,
-    llm=llm,
-    agent="chat-zero-shot-react-description",
-    verbose=True
-)
-
-def run_websearch_agent(user_prompt: str) -> List[Dict]:
-    print(f"🌐 Web Query: {user_prompt}")
-    raw_results = tavily_tool.run(user_prompt)
-    summary = summarize_chain.invoke({"raw_results": raw_results})
-    
-    # Return structured results instead of plain text
-    return [
-        {
-            "summary": line.strip("• ").strip(),
-            "raw_results": raw_results,
-            "source": "web_search"
+    async def recommend(self, query: str) -> Dict:
+        """End-to-end recommendation with minimal processing"""
+        # Get raw search results
+        search_results = await self._web_search(query)
+        
+        # Pass directly to GPT with minimal instructions
+        response = await self.llm.ainvoke(
+            f"""User query: {query}
+            
+            Raw search results:
+            {search_results}
+            
+            Provide helpful college recommendations based on these results.
+            Respond in whatever format makes the most sense for the query."""
+        )
+        
+        return {
+            "query": query,
+            "response": response.content,
+            "results_analyzed": len(search_results)
         }
-        for line in summary.content.split("\n") 
-        if line.strip()
-    ]
 
-# CLI Test
+    async def _web_search(self, query: str) -> str:
+        """Get raw search results as string"""
+        try:
+            results = self.search.results(query)
+            return str(results)  # Pass complete raw results
+        except Exception as e:
+            return f"Search error: {str(e)}"
+
+async def test_queries():
+    recommender = WebSearchRecommender()
+    
+    queries = [
+        "I have a 3.6 weighted GPA and 1280 SAT. What are good college matches?",
+        "Looking for top-ranked mechanical engineering programs that accept 30+ ACT scores",
+        "Suggest medium-sized universities in the Midwest for journalism majors",
+        "Need colleges with full-tuition scholarships for international students with 4.0 GPA",
+        "Which liberal arts colleges value debate team captains with 3.7 GPA?",
+        "First-generation Hispanic student, 3.9 GPA but no SAT - best targets for pre-law?",
+        "Colleges with strong autism support programs for computer science majors",
+        "Suggest safety, target and reach schools for 3.5 GPA and 29 ACT biology majors",
+        "Best test-optional universities for art history with 3.8 GPA",
+        "Community college transfer with 3.4 GPA seeking business programs in Florida"
+    ]
+    
+    for query in queries:
+        print(f"\n{'='*60}\nQuery: {query}")
+        results = await recommender.recommend(query)
+        print(f"\nResponse:\n{results['response']}\n")
+        print(f"Analyzed {results['results_analyzed']} search results")
+
 if __name__ == "__main__":
-    query = input("💬 What are you looking for? ")
-    result = run_websearch_agent(query)
-    print("\n✅ Final Answer:")
-    print(result)
+    asyncio.run(test_queries())

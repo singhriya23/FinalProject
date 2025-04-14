@@ -5,3 +5,4 @@ Agents/.env
 /__pycache__
 .env
 *.md
+*.pyc

@@ -135,25 +135,45 @@ def college_recommender_page():
             if msg.get("result"):
                 result = msg["result"]
                 
-                st.subheader("Recommended Colleges")
-                for college in result["snowflake"]:
-                    st.write(f"**{college.get('COLLEGE_NAME', 'Unknown')}**")
-                    st.write(f"- Ranking: {college.get('RANKING', 'N/A')}")
-                    st.write(f"- GPA Range: {college.get('MINIMUM_GPA', 'N/A')}")
-                    st.write(f"- SAT Range: {college.get('SAT_RANGE', 'N/A')}")
-                    st.write(f"- Tuition: ${college.get('TUITION_FEES', 'N/A')}")
-                    st.write(f"- Location: {college.get('LOCATION', 'N/A')}")
-                    if "PROGRAMS_OFFERED" in college:
-                        st.write("- Strong Programs: " + ", ".join(college["PROGRAMS_OFFERED"]))
-                    st.divider()
+                # Handle safety/off-topic messages
+                if result.get("message"):
+                    st.warning(result["message"])
+                    continue
                 
-                if result["rag"]:
-                    st.subheader("Supporting Information")
-                    for doc in result["rag"]:
-                        st.write(doc.get("text", ""))
-                        if "metadata" in doc:
-                            st.caption(f"Source: {doc['metadata'].get('source', 'Unknown')}")
-                        st.divider()
+                # Handle fallback notification
+                if result.get("fallback_used"):
+                    st.info(result["fallback_message"])
+                
+                # Display results if available
+                if result.get("data"):
+                    data = result["data"]
+                    
+                    # Display college results
+                    if data.get("colleges"):
+                        st.subheader("Recommended Colleges")
+                        for college in data["colleges"]:
+                            st.write(f"**{college.get('COLLEGE_NAME', 'Unknown')}**")
+                            st.write(f"- GPA Range: {college.get('MINIMUM_GPA', 'N/A')}")
+                            st.write(f"- SAT Range: {college.get('SAT_RANGE', 'N/A')}")
+                            st.divider()
+                    else:
+                        st.write("No matching colleges found in our database")
+                    
+                    # Display web results if fallback was used
+                    if data.get("web_results"):
+                        st.subheader("Web Recommendations")
+                        for web_result in data["web_results"]:
+                            st.write(web_result.get("text", ""))
+                            st.divider()
+                    
+                    # Display RAG documents
+                    if data.get("documents"):
+                        st.subheader("Supporting Information")
+                        for doc in data["documents"]:
+                            st.write(doc.get("text", ""))
+                            if "metadata" in doc:
+                                st.caption(f"Source: {doc['metadata'].get('source', 'Unknown')}")
+                            st.divider()
     
     # New prompt input
     if prompt := st.chat_input("Example: 'Find colleges for CS with 3.8 GPA'"):
@@ -173,9 +193,23 @@ def college_recommender_page():
                 )
                 result = response.json()
                 
+                # Format the assistant response
+                if result.get("message"):  # Safety/off-topic response
+                    assistant_response = result["message"]
+                elif result.get("data"):  # Normal results
+                    college_count = len(result["data"].get("colleges", []))
+                    web_count = len(result["data"].get("web_results", []))
+                    
+                    if college_count > 0:
+                        assistant_response = f"Found {college_count} matching colleges"
+                    elif web_count > 0:
+                        assistant_response = "Found web-based recommendations"
+                    else:
+                        assistant_response = "No matching colleges found"
+                
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": f"Found {len(result['snowflake'])} matching colleges",
+                    "content": assistant_response,
                     "result": result
                 })
                 
