@@ -1,8 +1,8 @@
 import asyncio
 from datetime import datetime
 from typing import List, Dict, Optional
-from .safety_system import SafetySystem
-from .dynamic_handler import DynamicIntentHandler
+from newintent.safety_system import SafetySystem
+from newintent.dynamic_handler import DynamicIntentHandler
 
 class CollegeRecommender:
     def __init__(self):

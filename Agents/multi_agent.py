@@ -3,10 +3,10 @@ from langgraph.graph import StateGraph, END
 import asyncio
 from datetime import datetime
 import json
-from snowflake_agent import search_college_data
-from rag_agent import get_retriever_output
-from websearch_agent import WebSearchRecommender
-from newintent.agents_1 import CollegeRecommender
+from Agents.snowflake_agent import search_college_data
+from Agents.rag_agent import get_retriever_output
+from Agents.websearch_agent import WebSearchRecommender
+from Agents.agents_1 import CollegeRecommender
 
 class RecommendationState(TypedDict):
     user_query: str

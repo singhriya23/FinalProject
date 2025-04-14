@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 import uuid
 from datetime import datetime, timezone 
-from multi_agent import app as langgraph_app  # Your existing LangGraph workflow
+from Agents.multi_agent import app as langgraph_app  # Your existing LangGraph workflow
 
 app = FastAPI()
 

@@ -1,35 +1,24 @@
-import os
+import os, json
 from dotenv import load_dotenv
 from typing import List
 from pinecone import Pinecone
 from sentence_transformers import SentenceTransformer
 from langchain.schema import Document
-from langchain.chat_models import ChatOpenAI
-from langchain.chains import RetrievalQA
 from langchain.schema.retriever import BaseRetriever
 
-# --- Load API Keys from .env ---
-load_dotenv(dotenv_path="Agents/.env")  # Adjust path if needed
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+load_dotenv(dotenv_path="Agents/.env")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-
-# --- Config ---
 PINECONE_INDEX_NAME = "college-recommendations"
 EMBED_MODEL_NAME = "all-MiniLM-L6-v2"
-OPENAI_MODEL = "gpt-4o"  # or "gpt-4o-mini", "gpt-3.5-turbo"
 
-# --- Initialize Embedding Model ---
 embedder = SentenceTransformer(EMBED_MODEL_NAME)
-
-# --- Initialize Pinecone Client ---
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index = pc.Index(PINECONE_INDEX_NAME)
 
-# --- Custom Retriever for Pinecone ---
 class PineconeLangChainRetriever(BaseRetriever):
     def __init__(self, pinecone_index, top_k=4):
         super().__init__()
-        self._index = pinecone_index  # ✅ Private attribute to avoid LangChain validation issues
+        self._index = pinecone_index
         self._top_k = top_k
 
     def get_relevant_documents(self, query: str) -> List[Document]:
@@ -47,29 +36,21 @@ class PineconeLangChainRetriever(BaseRetriever):
     async def aget_relevant_documents(self, query: str) -> List[Document]:
         return self.get_relevant_documents(query)
 
-# --- Initialize Retriever ---
 retriever = PineconeLangChainRetriever(index)
 
-# --- Initialize OpenAI LLM ---
-llm = ChatOpenAI(
-    temperature=0.9,
-    model_name=OPENAI_MODEL,
-    openai_api_key=OPENAI_API_KEY
-)
+def get_retriever_output(query: str) -> List[dict]:
+    docs = retriever.get_relevant_documents(query)
+    results = [{"text": doc.page_content, "metadata": doc.metadata} for doc in docs]
+    return results
 
-# --- Create RAG Chain ---
-rag_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
+def save_retriever_output(query: str, docs: List[dict], path="retriever_output.json"):
+    with open(path, "w") as f:
+        json.dump({"query": query, "results": docs}, f, indent=2)
 
-# --- CLI Loop ---
 if __name__ == "__main__":
-    print("🎓 RAG Agent Ready (OpenAI + Pinecone)")
-    print("Ask anything about colleges, programs, faculty... Type 'exit' to quit.\n")
-
-    while True:
-        user_input = input("You: ")
-        if user_input.lower() in ["exit", "quit"]:
-            print("👋 Goodbye!")
-            break
-
-        response = rag_chain.run(user_input)
-        print(f"\n🤖 Agent: {response}\n")
+    user_query = input("Enter query: ")
+    output = get_retriever_output(user_query)
+    save_retriever_output(user_query, output)
+    print("\n📄 Output (List[dict]):")
+    print(output)
+    print(f"\n✅ Retrieved and saved {len(output)} docs.")
