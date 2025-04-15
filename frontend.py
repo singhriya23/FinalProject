@@ -21,6 +21,7 @@ if 'conversations' not in st.session_state:  # Store all conversations
 if 'current_conversation' not in st.session_state:
     st.session_state.current_conversation = None
 # Replace the home_page() function with this updated version
+# Update the home_page() function to enable the comparator
 def home_page():
     local_css("style.css")
     
@@ -37,7 +38,6 @@ def home_page():
     </div>
     """, unsafe_allow_html=True)
     
-    # Use Streamlit columns for the cards
     col1, col2 = st.columns(2)
     
     with col1:
@@ -57,14 +57,16 @@ def home_page():
     with col2:
         with st.container():
             st.markdown("""
-            <div class="advisor-card disabled-card">
+            <div class="advisor-card">
                 <div class="card-icon">📊</div>
-                <h3>Career Advisor</h3>
-                <p>Discover career paths that match your skills and aspirations</p>
+                <h3>College Comparator</h3>
+                <p>Get a detailed comparison of colleges</p>
             </div>
             """, unsafe_allow_html=True)
             
-            st.button("Coming Soon", disabled=True)
+            if st.button("Compare Now →", key="comparator_btn"):
+                st.session_state.current_page = "college_comparator"
+                st.rerun()
 
 def start_new_chat():
     """Start a fresh conversation"""
@@ -217,6 +219,90 @@ def college_recommender_page():
             except Exception as e:
                 st.error(f"Error: {str(e)}")
 
+# Add this new function for the comparator page
+def college_comparator_page():
+    st.markdown("""
+    <style>
+        .stChatMessage, .stMarkdown, .stMarkdown p {
+            color: black !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    display_conversation_history()
+    
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.title("College Comparisons")
+    with col2:
+        if st.button("← Back to Home"):
+            st.session_state.current_page = "home"
+            st.session_state.session_id = None
+            st.session_state.messages = []
+            st.rerun()
+    
+    # Session management
+    if not st.session_state.session_id:
+        response = requests.post(f"{BACKEND_URL}/create_session")
+        st.session_state.session_id = response.json()["session_id"]
+    
+    # Display current conversation
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
+            if msg.get("result"):
+                result = msg["result"]
+                
+                if result.get("message"):  # Early response
+                    st.warning(result["message"])
+                    continue
+                
+                # Display comparison results
+                st.write(result["response"])
+                
+                if result.get("fallback_used"):
+                    st.info(f"Note: {result['fallback_message']}")
+                
+                # Show comparison details in expanders
+                with st.expander("Comparison Details"):
+                    if result["colleges"]:
+                        st.write("**Colleges Compared:**")
+                        st.write(", ".join(result["colleges"]))
+                    
+                    if result["aspects"]:
+                        st.write("**Aspects Compared:**")
+                        st.write(", ".join(result["aspects"]))
+    
+    # New prompt input
+    if prompt := st.chat_input("Example: 'Compare MIT and Stanford for computer science'"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        with st.chat_message("user"):
+            st.write(prompt)
+        
+        with st.spinner("Analyzing comparison..."):
+            try:
+                response = requests.post(
+                    f"{BACKEND_URL}/compare",
+                    json={
+                        "prompt": prompt,
+                        "session_id": st.session_state.session_id
+                    }
+                )
+                result = response.json()
+                
+                # Format the assistant response
+                assistant_response = result["response"]
+                
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": assistant_response,
+                    "result": result
+                })
+                
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+
 def main():
     local_css("style.css")
     
@@ -230,6 +316,8 @@ def main():
         home_page()
     elif st.session_state.current_page == "college_recommender":
         college_recommender_page()
+    elif st.session_state.current_page == "college_comparator":  # Add this condition
+        college_comparator_page()
 
 
 if __name__ == "__main__":
