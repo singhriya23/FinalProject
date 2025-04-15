@@ -1,4 +1,5 @@
 import os
+import re
 from dotenv import load_dotenv
 import snowflake.connector
 from langchain_openai import ChatOpenAI
@@ -33,24 +34,6 @@ COLUMN_MAPPING = {
 }
 
 COLLEGE_TABLE = "TOP_30.UNIVERSITY_LIST"
-
-COLLEGE_ALIASES = {
-    "mit": "Massachusetts Institute of Technology",
-    "harvard": "Harvard University",
-    "yale": "Yale University",
-    "princeton": "Princeton University",
-    "upenn": "University of Pennsylvania",
-    "penn": "University of Pennsylvania",
-    "dartmouth": "Dartmouth College",
-    "brown": "Brown University",
-    "columbia": "Columbia University",
-    "cornell": "Cornell University",
-    "stanford": "Stanford University",
-    "nyu": "New York University",
-    "ucla": "University of California – Los Angeles",
-    "uc berkeley": "University of California – Berkeley",
-    "ucsd": "University of California – San Diego"
-}
 
 SHORT_COLUMN_NAMES = {
     "COLLEGE_NAME": "Name",
@@ -87,133 +70,107 @@ def query_snowflake(query: str) -> list:
     conn.close()
     return [dict(zip(columns, row)) for row in results]
 
-def get_all_college_names() -> list:
-    try:
-        query = f"SELECT DISTINCT COLLEGE_NAME FROM {COLLEGE_TABLE}"
-        results = query_snowflake(query)
-        return [row["COLLEGE_NAME"] for row in results]
-    except Exception as e:
-        print(f"⚠️ Could not fetch college names: {e}")
-        return []
-
-# ---------------------- FILTERING LOGIC ----------------------
+# ---------------------- UTILITIES ----------------------
 def identify_relevant_columns(prompt: str) -> list:
-    relevant_cols = []
-    prompt_lower = prompt.lower()
-    for term, column in COLUMN_MAPPING.items():
-        if term in prompt_lower and column not in relevant_cols:
-            relevant_cols.append(column)
-    return relevant_cols
+    return [col for word, col in COLUMN_MAPPING.items() if word in prompt.lower()]
 
-def extract_college_names(prompt: str) -> list:
-    prompt_lower = prompt.lower()
-    matched_names = []
-    for alias, full_name in COLLEGE_ALIASES.items():
-        if alias in prompt_lower:
-            matched_names.append(full_name)
-    all_colleges = get_all_college_names()
-    for name in all_colleges:
-        if name.lower() in prompt_lower and name not in matched_names:
-            matched_names.append(name)
-    return list(set(matched_names))
+def extract_gpa_and_sat(prompt: str):
+    gpa_match = re.search(r"\b(\d\.\d{1,2})\b", prompt)
+    sat_match = re.search(r"\b(\d{3,4})\b", prompt)
+    gpa = float(gpa_match.group(1)) if gpa_match else None
+    sat = int(sat_match.group(1)) if sat_match else None
+    if gpa and gpa > 4.5:
+        gpa = None
+    if sat and sat < 800:
+        sat = None
+    return gpa, sat
 
 def summarize_data_for_prompt(data: list) -> str:
     if not data:
         return "No matching college data found."
-    summary_lines = []
+    summary = []
     for row in data[:10]:
-        parts = []
-        for col, val in row.items():
-            short_col = SHORT_COLUMN_NAMES.get(col, col)
-            if val is not None:
-                parts.append(f"{short_col}: {val}")
-        summary_lines.append(" | ".join(parts))
-    return "\n".join(summary_lines)
+        line = [f"{SHORT_COLUMN_NAMES.get(col, col)}: {val}" for col, val in row.items() if val]
+        summary.append(" | ".join(line))
+    return "\n".join(summary)
 
+# ---------------------- MAIN SEARCH ----------------------
 def search_and_filter(prompt: str) -> list:
     relevant_columns = identify_relevant_columns(prompt)
-    college_names = extract_college_names(prompt)
-    prompt_lower = prompt.lower()
+    gpa, sat = extract_gpa_and_sat(prompt)
 
-    # Dynamic fallback guard
-    if not relevant_columns:
-        vague_but_valid = any(kw in prompt_lower for kw in [
-            "top", "best", "affordable", "value", "cheap", "expensive", "ranking", "low fee"
-        ])
-        if not vague_but_valid:
-            return []
+    if not relevant_columns and (gpa or sat):
         relevant_columns = DEFAULT_COLUMNS
 
     if "COLLEGE_NAME" not in relevant_columns:
         relevant_columns.append("COLLEGE_NAME")
     if "LOCATION" not in relevant_columns:
         relevant_columns.append("LOCATION")
+
     columns_str = ", ".join(relevant_columns)
-
-    college_filter = ""
-    if college_names:
-        name_filter = " OR ".join([f"COLLEGE_NAME ILIKE '%{name}%'" for name in college_names])
-        college_filter = f"({name_filter})"
-
-    location_filter = ""
-    if "texas" in prompt_lower:
-        location_filter = "LOCATION ILIKE '%texas%' OR LOCATION ILIKE '%TX%'"
-
-    if college_filter and location_filter:
-        filter_condition = f"{college_filter} AND ({location_filter})"
-    elif college_filter:
-        filter_condition = college_filter
-    elif location_filter:
-        filter_condition = location_filter
-    else:
-        filter_condition = " AND ".join([f"{col} IS NOT NULL" for col in relevant_columns])
-
-    if "salary" in prompt_lower:
-        order_by = "ORDER BY MEDIAN_SALARY_AFTER_GRADUATION DESC"
-    elif "affordable" in prompt_lower or "lowest tuition" in prompt_lower:
-        order_by = "ORDER BY TUITION_FEES ASC"
-    elif "graduation rate" in prompt_lower and "highest" in prompt_lower:
-        order_by = "ORDER BY GRADUATION_RATE DESC"
-    else:
-        order_by = "ORDER BY RANKING ASC"
+    filter_condition = " AND ".join([f"{col} IS NOT NULL" for col in relevant_columns])
+    order_by = "ORDER BY RANKING ASC"
 
     query = f"""
         SELECT {columns_str}
         FROM {COLLEGE_TABLE}
         WHERE {filter_condition}
         {order_by}
-        LIMIT 50
+        LIMIT 100
     """
     try:
-        return query_snowflake(query)
+        results = query_snowflake(query)
     except Exception as e:
-        return [{"error": f"Error querying Snowflake: {e}"}]
+        return [{"error": f"Query error: {e}"}]
 
-# ---------------------- RESPONSE LOGIC ----------------------
+    # GPA or SAT filtering (OR logic)
+    if gpa or sat:
+        filtered = []
+        for row in results:
+            gpa_match = False
+            sat_match = False
+
+            gpa_str = str(row.get("MINIMUM_GPA", "")).strip()
+            match = re.search(r"(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)", gpa_str)
+            if match and gpa:
+                low, high = float(match.group(1)), float(match.group(2))
+                gpa_match = low <= gpa <= high
+            elif gpa_str.replace(".", "", 1).isdigit() and gpa:
+                gpa_match = gpa >= float(gpa_str)
+
+            sat_str = str(row.get("SAT_RANGE", "")).strip()
+            match = re.search(r"(\d{3,4})\s*[-–]\s*(\d{3,4})", sat_str)
+            if match and sat:
+                low, high = int(match.group(1)), int(match.group(2))
+                sat_match = low <= sat <= high
+
+            if gpa_match or sat_match:
+                filtered.append(row)
+        results = filtered
+
+    return results
+
+# ---------------------- LLM RESPONSE ----------------------
 def generate_recommendation(prompt: str, data: list) -> str:
-    if not data or isinstance(data[0], dict) and (
-        "error" in data[0] or all((v is None or v == "") for v in data[0].values())
-    ):
+    if not data:
         return "No data in our system match the prompt provided. Please use the web search agent for this query."
-
     llm = ChatOpenAI(model="gpt-4", temperature=0.3)
-    summarized = summarize_data_for_prompt(data)
-    response = llm.invoke(
-        f"""You are a helpful college recommendation assistant.
+    summary = summarize_data_for_prompt(data)
+    return llm.invoke(
+        f"""You are a helpful assistant.
+Use only the following data to respond to the user query:
 
-        ONLY use the following summarized college data stored in Snowflake. DO NOT suggest universities not present in the data:
-        {summarized}
+{summary}
 
-        User prompt: \"{prompt}\"
+User Prompt: "{prompt}"
 
-        Be concise, specific, and avoid recommending colleges that are not in the provided list.
-        """
-    )
-    return response.content
+Respond concisely using only the colleges in the list above.
+"""
+    ).content
 
-# ---------------------- AGENT NODES ----------------------
+# ---------------------- LANGGRAPH FLOW ----------------------
 def input_node(state):
-    prompt = input("\U0001F4AC What kind of colleges are you looking for? ")
+    prompt = input("\n💬 What kind of colleges are you looking for?\n> ")
     return {"prompt": prompt}
 
 def fetch_recommendation_data(state):
@@ -232,7 +189,6 @@ def output_node(state):
     print(state["response"])
     return state
 
-# ---------------------- WORKFLOW ----------------------
 recommendation_graph = Graph()
 recommendation_graph.add_node("input", input_node)
 recommendation_graph.add_node("fetch_data", fetch_recommendation_data)
