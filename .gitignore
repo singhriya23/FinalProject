@@ -6,3 +6,6 @@ Agents/.env
 .env
 *.md
 *.pyc
+*.log
+/Airflow/logs/scheduler
+/dags/dags/dags/dags/logs/scheduler
