@@ -1,10 +1,12 @@
 from dotenv import load_dotenv
 from recommendation_snowflake import search_and_filter, generate_recommendation
-from RecommenderRAG_2 import PineconeRetriever, GPT4Recommender, CourseRecommenderAgent
+from RecommenderRAG_3 import PineconeRetriever, GPT4Recommender, CourseRecommenderAgent
 from pinecone import Pinecone
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 import os
+import sys
+import contextlib
 
 # ---------- Load environment ----------
 load_dotenv("Agents/.env")
@@ -19,6 +21,17 @@ pc = Pinecone(api_key=PINECONE_API_KEY)
 index = pc.Index(PINECONE_INDEX_NAME)
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
+# ---------- Silence stdout context ----------
+@contextlib.contextmanager
+def suppress_stdout():
+    with open(os.devnull, "w") as devnull:
+        old_stdout = sys.stdout
+        sys.stdout = devnull
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout
+
 # ---------- Initialize Agents ----------
 retriever = PineconeRetriever(index)
 gpt4 = GPT4Recommender()
@@ -30,21 +43,19 @@ def validate_and_compare(prompt: str) -> str:
     snowflake_data = search_and_filter(prompt)
     snowflake_response = generate_recommendation(prompt, snowflake_data) if snowflake_data else ""
 
-    # Run RAG Agent
-    rag_response = rag_agent.recommend(prompt)
+    # Run RAG Agent (silencing debug prints)
+    with suppress_stdout():
+        rag_response = rag_agent.recommend(prompt)
     rag_response_clean = rag_response.strip() if rag_response else ""
 
-    # Combine all content
-    combined_content = "".join([
-        snowflake_response if snowflake_response else "",
-        "\n\n",
-        rag_response_clean if rag_response_clean else ""
-    ]).strip()
+    # Check if both sources failed
+    if not snowflake_data and (not rag_response_clean or "no relevant course information" in rag_response_clean.lower()):
+        return "❌ No relevant data found in Snowflake or RAG system. Consider using the web search agent."
 
-    if not combined_content:
-        return "❌ No valid data found in either Snowflake or RAG system. Please refine your query."
+    # Combine responses
+    combined_content = "\n\n".join(filter(None, [snowflake_response, rag_response_clean]))
 
-    # Give final prompt to LLM to evaluate and format
+    # Send to GPT-4
     full_prompt = f"""
 You are a helpful college guidance assistant. A user has asked the following question:
 
@@ -54,7 +65,13 @@ You have access to combined information retrieved from both structured databases
 
 {combined_content}
 
-Please structure the information in a useful and user-friendly way. Ensure the response directly answers the user's query. Do not make vague or generic suggestions like 'check the university's catalog' or 'refer to their website.' Avoid redundancy and avoid separating by source.
+Please structure the information in a useful and user-friendly way. Ensure the response directly answers the user's query.
+
+Your response must:
+- Only recommend courses from the colleges explicitly mentioned in the query
+- Avoid vague phrases like 'refer to the catalog' or 'check the website'
+- Include admission requirements if they are present in the data
+- Avoid separating the sources (combine Snowflake and RAG data)
 """
 
     response = openai_client.chat.completions.create(
