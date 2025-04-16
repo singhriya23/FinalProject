@@ -4,8 +4,8 @@ from pydantic import BaseModel
 from typing import Optional
 import uuid
 from datetime import datetime, timezone 
-from Agents.multi_agent import app as langgraph_app  # Your existing LangGraph workflow
-from Agents.multiagent_compare import app as comparison_workflow
+from multi_Agents.multi_agent import app as langgraph_app  # Your existing LangGraph workflow
+from multi_Agents.multiagent_compare import app as comparison_workflow
 from fastapi import BackgroundTasks
 import subprocess
 import asyncio

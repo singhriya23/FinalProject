@@ -3,10 +3,10 @@ from langgraph.graph import StateGraph, END
 import asyncio
 from datetime import datetime
 import json
-from Agents.websearch_agent import WebSearchRecommender
-from Agents.gate_agent import CollegeRecommender
+from multi_Agents.websearch_agent import WebSearchRecommender
+from multi_Agents.gate_agent import CollegeRecommender
 from dotenv import load_dotenv
-from Agents.validate_recommender import validate_and_merge  # Import the existing function
+from multi_Agents.validate_recommender import validate_and_compare  # Import the existing function
 
 load_dotenv()
 
@@ -94,6 +94,7 @@ async def check_prompt_node(state: RecommendationState):
     }
 
 async def query_combined_agent_node(state: RecommendationState):
+    '''
     """TEST VERSION - Always returns empty results to trigger fallback"""
     print("\n🔍 TEST MODE: Combined agent returning empty results to trigger fallback")
     
@@ -106,9 +107,9 @@ async def query_combined_agent_node(state: RecommendationState):
     }
 '''
     try:
-        result = validate_and_merge(state['user_query'])
+        result = validate_and_compare(state['user_query'])
         
-        print("\n🔍 Raw results from validate_and_merge:")
+        print("\n🔍 Raw results from validate_and_compare:")
         print(f"Combined output length: {len(result.get('combined_agent_results', ''))}")
         print(f"Snowflake results type: {type(result.get('snowflake_results'))} count: {len(result.get('snowflake_results', []))}")
         print(f"RAG results type: {type(result.get('rag_results'))} count: {len(result.get('rag_results', []))}")
@@ -130,7 +131,7 @@ async def query_combined_agent_node(state: RecommendationState):
             "fallback_used": True,
             "fallback_message": "Error processing your request"
         }
-    '''
+
 async def check_results_node(state: RecommendationState):
 
 
@@ -263,7 +264,7 @@ async def test_workflow(query: str):
 
 if __name__ == "__main__":
     test_queries = [
-        "Which affordable universities offer Data Science in California?"
+        "Show me computer science course requirements at MIT"
     ]
     
     for query in test_queries:

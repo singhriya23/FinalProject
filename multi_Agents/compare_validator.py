@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
-from compareRAG import get_documents_by_college, compare_colleges_on_prompt
-from compare_snowflake import search_compare_data, generate_comparison
+from multi_Agents.compareRAG import get_documents_by_college, compare_colleges_on_prompt
+from multi_Agents.compare_snowflake import search_compare_data, generate_comparison
 from openai import OpenAI
 import os
 

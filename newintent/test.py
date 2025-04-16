@@ -1,4 +1,4 @@
-from Agents.gate_agent import CollegeRecommender
+from multi_Agents.gate_agent import CollegeRecommender
 import asyncio
 
 async def test_agent():
