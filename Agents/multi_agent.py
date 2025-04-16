@@ -94,6 +94,17 @@ async def check_prompt_node(state: RecommendationState):
     }
 
 async def query_combined_agent_node(state: RecommendationState):
+    """TEST VERSION - Always returns empty results to trigger fallback"""
+    print("\n🔍 TEST MODE: Combined agent returning empty results to trigger fallback")
+    
+    return {
+        **state,  # Preserve existing state
+        "combined_agent_results": None,
+        "snowflake_results": [],  # Empty list to trigger fallback
+        "rag_results": [],  # Empty list to trigger fallback
+        "fallback_used": False  # Not yet used, but will be triggered by check_results_node
+    }
+'''
     try:
         result = validate_and_merge(state['user_query'])
         
@@ -119,8 +130,10 @@ async def query_combined_agent_node(state: RecommendationState):
             "fallback_used": True,
             "fallback_message": "Error processing your request"
         }
-    
+    '''
 async def check_results_node(state: RecommendationState):
+
+
     """Check if we should fall back to web search"""
     print("\n🔍 State in check_results_node:")
     print(f"Full state keys: {state.keys()}")

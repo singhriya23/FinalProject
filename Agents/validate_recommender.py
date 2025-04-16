@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
-from recommendation_snowflake import search_and_filter, generate_recommendation
-from RecommenderRAG import PineconeLangChainRetriever, CourseRecommenderAgent, index
+from Agents.recommendation_snowflake import search_and_filter, generate_recommendation
+from Agents.RecommenderRAG import PineconeLangChainRetriever, CourseRecommenderAgent, index
 
 load_dotenv()
 

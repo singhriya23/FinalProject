@@ -4,7 +4,7 @@ from langgraph.graph import StateGraph, END
 import asyncio
 import json
 from Agents.websearch_compare import WebSearchComparisonAgent
-from Agents.agents_1 import CollegeRecommender
+from Agents.gate_agent import CollegeRecommender
 from Agents.college_compare import ComparisonDetector
 
 class ComparisonState(TypedDict):

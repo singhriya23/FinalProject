@@ -6,7 +6,16 @@ import uuid
 from datetime import datetime, timezone 
 from Agents.multi_agent import app as langgraph_app  # Your existing LangGraph workflow
 from Agents.multiagent_compare import app as comparison_workflow
+from fastapi import BackgroundTasks
+import subprocess
+import asyncio
+from agents import Agent, Runner
+from agents.mcp import MCPServerStdio
+from openai import OpenAI
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 app = FastAPI()
 
 # Session management in memory (replace with DB in production)
@@ -44,6 +53,7 @@ async def get_recommendations(request: RecommendationRequest):
     # Prepare initial state for LangGraph
     langgraph_state = {
         "user_query": request.prompt,
+        "combined_agent_results": None,
         "snowflake_results": [],
         "rag_results": [],
         "web_results": [],
@@ -56,7 +66,10 @@ async def get_recommendations(request: RecommendationRequest):
     }
 
     # Execute the workflow
-    result = await langgraph_app.ainvoke(langgraph_state)
+    try:
+        result = await langgraph_app.ainvoke(langgraph_state)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Workflow execution failed: {str(e)}")
     
     # Build unified response
     response = {
@@ -75,6 +88,7 @@ async def get_recommendations(request: RecommendationRequest):
         final_output = result.get("final_output", {})
         response.update({
             "data": {
+                "combined_output": final_output.get("combined_output"),
                 "colleges": final_output.get("snowflake", []),
                 "documents": final_output.get("rag", []),
                 "web_results": final_output.get("web", [])
@@ -83,12 +97,21 @@ async def get_recommendations(request: RecommendationRequest):
             "fallback_message": final_output.get("fallback_message", "")
         })
 
+        # Validate we actually got results
+        if not (final_output.get("snowflake") or final_output.get("rag") or final_output.get("web")):
+            response["success"] = False
+            response["message"] = "No results found for your query"
+
     # Store in session if available
     if request.session_id:
         sessions[request.session_id].history.append({
-            "timestamp": datetime.now(timezone.utc).isoformat(),  # Updated this line
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "prompt": request.prompt,
-            "response": response
+            "response": response,
+            "workflow_metadata": {
+                "fallback_used": result.get("fallback_used", False),
+                "is_college_related": result.get("is_college_related", False)
+            }
         })
 
     return response
@@ -155,3 +178,85 @@ async def compare_colleges(request: RecommendationRequest):
 
     return response
 
+# Add this model class
+class RankingRequest(BaseModel):
+    question: str
+
+# Add this endpoint
+@app.post("/university_rankings")
+async def get_university_ranking(request: RankingRequest):
+    """
+    Endpoint to answer questions about QS World University Rankings.
+    
+    Example questions:
+    - "Which university is ranked 5th?"
+    - "What is MIT's ranking?"
+    - "Show top 5 universities"
+    """
+    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    
+    try:
+        async with MCPServerStdio(
+            name="University Rankings Assistant",
+            params={
+                "command": "python",
+                "args": ["server.py"]  # Your simplified server file
+            }
+        ) as server:
+            
+            agent = Agent(
+                name="University Rankings Expert",
+                instructions="""You are an expert on QS World University Rankings with one capability:
+                            1. Answer questions about university rankings using get_qs_rankings
+                            
+                            For ranking questions:
+                            - Always verify the university name if provided
+                            - For rank number queries (e.g., "5th"), confirm the exact position
+                            - When showing top universities, always mention it's from QS rankings
+                            - Handle errors gracefully and suggest rephrasing if needed""",
+                mcp_servers=[server]
+            )
+            
+            # Process the ranking question
+            result = await Runner.run(
+                starting_agent=agent,
+                input=f"Answer this question about university rankings: {request.question}"
+            )
+            
+            response = {
+                "success": True,
+                "question": request.question,
+                "answer": result.final_output,
+                "additional_context": None
+            }
+            
+            # Add OpenAI context for follow-up questions
+            if "rank" in result.final_output.lower():
+                gpt_response = openai_client.chat.completions.create(
+                    model="gpt-4-turbo",
+                    messages=[{
+                        "role": "system",
+                        "content": """Provide helpful context about university rankings. 
+                        When mentioning a ranked university:
+                        - Note its historical ranking trends if significant
+                        - Mention 1-2 notable strengths
+                        - Suggest similar-ranked institutions
+                        Keep responses concise and factual."""
+                    }, {
+                        "role": "user",
+                        "content": f"About this university ranking: {result.final_output}"
+                    }]
+                )
+                response["additional_context"] = gpt_response.choices[0].message.content
+                
+            return response
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": str(e),
+                "message": "Failed to process ranking request"
+            }
+        )

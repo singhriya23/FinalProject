@@ -1,7 +1,9 @@
-# app.py (with New Chat button)
+
 import streamlit as st
 import requests
-from pathlib import Path
+import json
+from io import StringIO
+from datetime import datetime
 # Config
 BACKEND_URL = "http://localhost:8000"
 
@@ -20,101 +22,269 @@ if 'conversations' not in st.session_state:  # Store all conversations
     st.session_state.conversations = []
 if 'current_conversation' not in st.session_state:
     st.session_state.current_conversation = None
-# Replace the home_page() function with this updated version
-# Update the home_page() function to enable the comparator
+
 def home_page():
     local_css("style.css")
     
+    # Full-width expanded header
     st.markdown("""
     <style>
+        .header-container {
+            text-align: center;
+            margin-bottom: 30px;
+        }
         .home-title {
-            color: #1e293b !important;
+            color: #1e293b;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        .home-subtitle {
+            color: #4b5563;
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+        }
+        .feature-card {
+            padding: 25px;
+            border-radius: 12px;
+            background-color: black;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+        .feature-title {
+            color: #4b5563;
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+        }
+        .feature-description {
+            color: #4b5563;
+            margin-bottom: 20px;
         }
     </style>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <div class="home-container">
+    <div class="header-container">
         <h1 class="home-title">College Advisor Pro</h1>
         <p class="home-subtitle">Your personalized guide to finding the perfect college</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    
+
+    # Main content columns
+    col1, col2 = st.columns(2, gap="large")
+
     with col1:
+        # College Recommender Card
         with st.container():
             st.markdown("""
-            <div class="advisor-card">
-                <div class="card-icon">🎓</div>
-                <h3>College Recommender</h3>
-                <p>Find your ideal college based on GPA, test scores, and academic interests</p>
+            <div class="feature-card">
+                <h2 class="feature-title">College Recommender</h2>
+                <p class="feature-description">
+                    Find your ideal college based on GPA, test scores, and academic interests
+                </p>
             </div>
             """, unsafe_allow_html=True)
-            
-            if st.button("Get Started →", key="recommender_btn"):
+            if st.button("Get Started →", key="recommender_btn", use_container_width=True):
                 st.session_state.current_page = "college_recommender"
                 st.rerun()
-    
-    with col2:
+
+        # College Comparator Card
         with st.container():
             st.markdown("""
-            <div class="advisor-card">
-                <div class="card-icon">📊</div>
-                <h3>College Comparator</h3>
-                <p>Get a detailed comparison of colleges</p>
+            <div class="feature-card">
+                <h2 class="feature-title">College Comparator</h2>
+                <p class="feature-description">
+                    Get a detailed comparison between colleges
+                </p>
             </div>
             """, unsafe_allow_html=True)
-            
-            if st.button("Compare Now →", key="comparator_btn"):
+            if st.button("Compare Now →", key="comparator_btn", use_container_width=True):
                 st.session_state.current_page = "college_comparator"
                 st.rerun()
 
+    with col2:
+        # University Rankings Card
+        with st.container():
+            st.markdown("""
+            <div class="feature-card">
+                <h2 class="feature-title">University Rankings</h2>
+                <p class="feature-description">
+                    Explore QS World University Rankings and other ranking systems
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("View Rankings →", key="rankings_btn", use_container_width=True):
+                st.session_state.current_page = "university_rankings"
+                st.rerun()
+
 def start_new_chat():
-    """Start a fresh conversation"""
-    if st.session_state.messages:
-        # Save current conversation before clearing
-        st.session_state.conversations.append({
-            'id': len(st.session_state.conversations) + 1,
-            'messages': st.session_state.messages.copy()
-        })
-    
-    # Reset for new conversation
+    """Completely resets the current chat session without saving"""
     st.session_state.messages = []
-    response = requests.post(f"{BACKEND_URL}/create_session")
-    st.session_state.session_id = response.json()["session_id"]
+    try:
+        response = requests.post(f"{BACKEND_URL}/create_session")
+        st.session_state.session_id = response.json().get("session_id")
+        # Add welcome message
+        st.session_state.messages = [{
+            "role": "assistant",
+            "content": "Hello! I can help you find colleges. Ask me anything about universities, programs, or admissions.",
+            "result": {"message": "Welcome to College Advisor Pro"}
+        }]
+    except Exception as e:
+        st.error(f"Failed to create new session: {str(e)}")
     st.rerun()
 
 def display_conversation_history():
+    """Displays saved conversations in sidebar with management options"""
     with st.sidebar:
-        st.button("➕ New Chat", on_click=start_new_chat)
-        st.subheader("Conversation History")
+        st.markdown("## Conversation History")
         
-        if not st.session_state.conversations:
-            st.write("No previous conversations")
-            return
+        if st.button("🆕 New Chat", use_container_width=True, 
+                    help="Start a fresh conversation (current chat won't be saved)"):
+            start_new_chat()
+        
+        st.markdown("---")
+        st.markdown("### Saved Conversations")
+        
+        if not st.session_state.get('conversations', []):
+            st.info("No saved conversations yet")
+        else:
+            for conv in st.session_state.conversations:
+                first_msg = next(
+                    (m['content'] for m in conv['messages'] if m['role'] == 'user'),
+                    "College recommendation"
+                )
+                
+                with st.expander(f"🗓️ {conv['timestamp']}"):
+                    st.caption(first_msg[:50] + ("..." if len(first_msg) > 50 else ""))
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        if st.button("Load", key=f"load_{conv['id']}"):
+                            st.session_state.messages = [m.copy() for m in conv['messages']]
+                            st.rerun()
+                    with col2:
+                        if st.button("❌", key=f"delete_{conv['id']}"):
+                            st.session_state.conversations = [
+                                c for c in st.session_state.conversations 
+                                if c['id'] != conv['id']
+                            ]
+                            st.rerun()
+
+
+def generate_report(messages):
+    """Generates a clean text report from messages"""
+    report_lines = []
+    for msg in messages:
+        role = "You" if msg["role"] == "user" else "Advisor"
+        report_lines.append(f"\n{role}: {msg['content']}")
+        
+        if msg.get("result"):
+            result = msg["result"]
+            if result.get("message"):
+                report_lines.append(f"Response: {result['message']}")
+            elif result.get("response"):
+                report_lines.append(f"Response: {result['response']}")
+            elif result.get("data", {}).get("combined_output"):
+                report_lines.append(f"\nRecommendation Summary:\n{result['data']['combined_output']}")
             
-        for conv in st.session_state.conversations:
-            # Get first user message as title
-            first_user_msg = next(
-                (msg['content'] for msg in conv['messages'] if msg['role'] == 'user'), 
-                "Empty conversation"
-            )
-            
-            if st.button(f"{conv['id']}. {first_user_msg[:30]}...", key=f"conv_{conv['id']}"):
-                # Load this conversation
-                st.session_state.messages = conv['messages'].copy()
-                st.rerun()
+            if result.get("data", {}).get("snowflake"):
+                report_lines.append("\nRecommended Colleges:")
+                for college in result["data"]["snowflake"]:
+                    report_lines.append(f"- {college.get('COLLEGE_NAME', 'Unknown')}")
+    
+    return "\n".join(report_lines)
+
+def get_downloadable_content(result):
+    """Convert the result into a downloadable text format"""
+    buffer = StringIO()
+    
+    if isinstance(result, (dict, list)):
+        json.dump(result, buffer, indent=2)
+    else:
+        buffer.write(str(result))
+    
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def display_pure_response(result):
+    """Extracts and returns only the display-worthy text content from response"""
+    if not result:
+        return ""
+    
+    if isinstance(result, dict):
+        # Case 1: Standard response with direct message/response fields
+        if result.get("message"):
+            return result["message"]
+        if result.get("response"):
+            return result["response"]
+        
+        # Case 2: Nested data with combined_output (now under 'data' key)
+        if result.get("data", {}).get("combined_output"):
+            return result["data"]["combined_output"]
+        
+        # Case 3: Web results structure (now under 'data' key)
+        if result.get("data", {}).get("web_results"):
+            web_results = result["data"]["web_results"]
+            if isinstance(web_results, list):
+                # Extract all text fields from web_results
+                texts = []
+                for item in web_results:
+                    if isinstance(item, dict) and item.get("text"):
+                        texts.append(item["text"])
+                if texts:
+                    return "\n\n".join(texts)
+        
+        # Fallback for any other dictionary structure
+        return str(result)
+    
+    # Fallback for non-dict results (lists, strings, etc.)
+    return str(result)
 
 def college_recommender_page():
     st.markdown("""
     <style>
-        .stChatMessage, .stMarkdown, .stMarkdown p {
-            color: black !important;
+        /* Main text styling */
+        .stChatMessage, .stMarkdown, .stMarkdown p, .stText {
+            color: #000000 !important;
+        }
+        
+        /* Chat message bubbles */
+        [data-testid="stChatMessage"] {
+            background-color: #f8f9fa !important;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border: 1px solid #e1e4e8 !important;
+        }
+        
+        /* Button styling */
+        .stButton>button {
+            border: 1px solid #4f46e5 !important;
+            color: #4f46e5 !important;
+            background-color: white !important;
+            padding: 8px 16px !important;
+            border-radius: 6px !important;
+            margin: 4px !important;
+        }
+        
+        .stButton>button:hover {
+            background-color: #f5f3ff !important;
+        }
+        
+        /* Input box */
+        .stChatInputContainer {
+            border-top: 1px solid #ddd !important;
+            padding-top: 12px !important;
+        }
+        
+        /* Success message */
+        .stSuccess {
+            font-size: 14px !important;
+        }
+        
+        /* Sidebar styling */
+        .sidebar .sidebar-content {
+            padding: 2rem 1rem;
         }
     </style>
     """, unsafe_allow_html=True)
-    display_conversation_history()
-    
-    # Back button at top right
+
+    # Header with back button (main content area)
     col1, col2 = st.columns([4, 1])
     with col1:
         st.title("College Recommendations")
@@ -124,112 +294,170 @@ def college_recommender_page():
             st.session_state.session_id = None
             st.session_state.messages = []
             st.rerun()
-    
-    # Session management
+
+    # Sidebar with conversation history
+    with st.sidebar:
+        st.markdown("## Conversation History")
+        
+        # New Chat button - clears current conversation without saving
+        if st.button("🆕 New Chat", use_container_width=True):
+            st.session_state.messages = []
+            try:
+                response = requests.post(f"{BACKEND_URL}/create_session")
+                st.session_state.session_id = response.json().get("session_id")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to create new session: {str(e)}")
+        
+        st.markdown("---")
+        st.markdown("### Saved Conversations")
+        
+        if not st.session_state.get('conversations', []):
+            st.info("No saved conversations yet")
+        else:
+            for conv in st.session_state.conversations:
+                # Get first user message or default text
+                first_msg = next(
+                    (m['content'] for m in conv['messages'] if m['role'] == 'user'),
+                    "Saved conversation"
+                )
+                
+                # Display each saved conversation with options
+                with st.expander(f"🗓️ {conv['timestamp']}"):
+                    st.caption(first_msg[:50] + ("..." if len(first_msg) > 50 else ""))
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        if st.button("Load", key=f"load_{conv['id']}"):
+                            st.session_state.messages = conv['messages'].copy()
+                            st.rerun()
+                    with col2:
+                        if st.button("❌", key=f"delete_{conv['id']}"):
+                            st.session_state.conversations = [
+                                c for c in st.session_state.conversations 
+                                if c['id'] != conv['id']]
+                            st.rerun()
+
+    # Initialize session if needed
     if not st.session_state.session_id:
-        response = requests.post(f"{BACKEND_URL}/create_session")
-        st.session_state.session_id = response.json()["session_id"]
-    
-    # Display current conversation
-    for msg in st.session_state.messages:
+        try:
+            response = requests.post(f"{BACKEND_URL}/create_session")
+            st.session_state.session_id = response.json().get("session_id")
+            # Add welcome message only if no messages exist
+            if not st.session_state.messages:
+                st.session_state.messages = [{
+                    "role": "assistant",
+                    "content": "Hello! I can help you find colleges. Ask me anything about universities, programs, or admissions.",
+                    "result": {"message": "Welcome to College Advisor Pro"}
+                }]
+        except Exception as e:
+            st.error(f"Failed to create session: {str(e)}")
+            return
+
+    # Display all messages in the current conversation
+    for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
-            st.write(msg["content"])
-            if msg.get("result"):
-                result = msg["result"]
+            # Only show content if it exists (prevents duplicates)
+            if msg["role"] == "user":
+                st.write(msg["content"])
+            
+            # Show response if available
+            elif msg.get("result"):
+                response_content = display_pure_response(msg["result"])
+                st.write(response_content)
                 
-                # Handle safety/off-topic messages
-                if result.get("message"):
-                    st.warning(result["message"])
-                    continue
-                
-                # Handle fallback notification
-                if result.get("fallback_used"):
-                    st.info(result["fallback_message"])
-                
-                # Display results if available
-                if result.get("data"):
-                    data = result["data"]
-                    
-                    # Display college results
-                    if data.get("colleges"):
-                        st.subheader("Recommended Colleges")
-                        for college in data["colleges"]:
-                            st.write(f"**{college.get('COLLEGE_NAME', 'Unknown')}**")
-                            st.write(f"- GPA Range: {college.get('MINIMUM_GPA', 'N/A')}")
-                            st.write(f"- SAT Range: {college.get('SAT_RANGE', 'N/A')}")
-                            st.divider()
-                    else:
-                        st.write("No matching colleges found in our database")
-                    
-                    # Display web results if fallback was used
-                    if data.get("web_results"):
-                        st.subheader("Web Recommendations")
-                        for web_result in data["web_results"]:
-                            st.write(web_result.get("text", ""))
-                            st.divider()
-                    
-                    # Display RAG documents
-                    if data.get("documents"):
-                        st.subheader("Supporting Information")
-                        for doc in data["documents"]:
-                            st.write(doc.get("text", ""))
-                            if "metadata" in doc:
-                                st.caption(f"Source: {doc['metadata'].get('source', 'Unknown')}")
-                            st.divider()
-    
-    # New prompt input
-    if prompt := st.chat_input("Example: 'Find colleges for CS with 3.8 GPA'"):
+                # Add action buttons for assistant responses only
+                if msg["role"] == "assistant":
+                    col1, col2 = st.columns([1, 1])
+                    with col1:
+                        if st.button(f"📥 Download", key=f"download_{i}"):
+                            download_content = generate_report([msg])
+                            st.download_button(
+                                label="Confirm Download",
+                                data=download_content,
+                                file_name=f"college_recommendation_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                                mime="text/plain",
+                                key=f"real_download_{i}"
+                            )
+                    with col2:
+                        if st.button(f"💾 Save", key=f"save_{i}"):
+                            # Create new conversation entry with current messages
+                            new_conv = {
+                                'id': len(st.session_state.conversations) + 1,
+                                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                'messages': [{
+                                    "role": m["role"],
+                                    "content": m["content"],
+                                    "result": m.get("result", {}).copy() if isinstance(m.get("result"), dict) else m.get("result")
+                                } for m in st.session_state.messages]
+                            }
+                            
+                            # Initialize conversations if not exists
+                            if 'conversations' not in st.session_state:
+                                st.session_state.conversations = []
+                            
+                            # Add to conversations
+                            st.session_state.conversations.append(new_conv)
+                            st.toast("Conversation saved!", icon="✅")
+                            st.rerun()
+
+    # Handle new user input
+    if prompt := st.chat_input("Ask about colleges..."):
+        # Add user message
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        with st.chat_message("user"):
-            st.write(prompt)
-        
-        with st.spinner("Finding best colleges..."):
+        with st.spinner("Researching colleges..."):
             try:
+                # Get backend response
                 response = requests.post(
                     f"{BACKEND_URL}/recommend",
                     json={
                         "prompt": prompt,
                         "session_id": st.session_state.session_id
-                    }
+                    },
+                    timeout=30
                 )
                 result = response.json()
                 
-                # Format the assistant response
-                if result.get("message"):  # Safety/off-topic response
-                    assistant_response = result["message"]
-                elif result.get("data"):  # Normal results
-                    college_count = len(result["data"].get("colleges", []))
-                    web_count = len(result["data"].get("web_results", []))
-                    
-                    if college_count > 0:
-                        assistant_response = f"Found {college_count} matching colleges"
-                    elif web_count > 0:
-                        assistant_response = "Found web-based recommendations"
-                    else:
-                        assistant_response = "No matching colleges found"
-                
+                # Add assistant response
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": assistant_response,
+                    "content": display_pure_response(result),
                     "result": result
                 })
                 
                 st.rerun()
+                
+            except requests.Timeout:
+                st.error("Request timed out. Please try again.")
             except Exception as e:
-                st.error(f"Error: {str(e)}")
+                st.error(f"Error getting recommendations: {str(e)}")
 
-# Add this new function for the comparator page
 def college_comparator_page():
     st.markdown("""
     <style>
         .stChatMessage, .stMarkdown, .stMarkdown p {
             color: black !important;
         }
+        /* Add the same styling as recommender page for consistency */
+        [data-testid="stChatMessage"] {
+            background-color: #f8f9fa !important;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border: 1px solid #e1e4e8 !important;
+        }
+        .stButton>button {
+            border: 1px solid #4f46e5 !important;
+            color: #4f46e5 !important;
+            background-color: white !important;
+            padding: 8px 16px !important;
+            border-radius: 6px !important;
+            margin: 4px !important;
+        }
     </style>
     """, unsafe_allow_html=True)
-    display_conversation_history()
     
+    # Header with back button
     col1, col2 = st.columns([4, 1])
     with col1:
         st.title("College Comparisons")
@@ -239,45 +467,127 @@ def college_comparator_page():
             st.session_state.session_id = None
             st.session_state.messages = []
             st.rerun()
-    
-    # Session management
+
+    # Add conversation history sidebar (same as recommender)
+    with st.sidebar:
+        st.markdown("## Conversation History")
+        
+        # New Chat button
+        if st.button("🆕 New Chat", use_container_width=True):
+            st.session_state.messages = []
+            try:
+                response = requests.post(f"{BACKEND_URL}/create_session")
+                st.session_state.session_id = response.json().get("session_id")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to create new session: {str(e)}")
+        
+        st.markdown("---")
+        st.markdown("### Saved Conversations")
+        
+        if not st.session_state.get('conversations', []):
+            st.info("No saved conversations yet")
+        else:
+            for conv in st.session_state.conversations:
+                first_msg = next(
+                    (m['content'] for m in conv['messages'] if m['role'] == 'user'),
+                    "College comparison"
+                )
+                
+                with st.expander(f"🗓️ {conv['timestamp']}"):
+                    st.caption(first_msg[:50] + ("..." if len(first_msg) > 50 else ""))
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        if st.button("Load", key=f"load_{conv['id']}"):
+                            st.session_state.messages = [m.copy() for m in conv['messages']]
+                            st.rerun()
+                    with col2:
+                        if st.button("❌", key=f"delete_{conv['id']}"):
+                            st.session_state.conversations = [
+                                c for c in st.session_state.conversations 
+                                if c['id'] != conv['id']
+                            ]
+                            st.rerun()
+
+    # Initialize session if needed
     if not st.session_state.session_id:
-        response = requests.post(f"{BACKEND_URL}/create_session")
-        st.session_state.session_id = response.json()["session_id"]
-    
-    # Display current conversation
-    for msg in st.session_state.messages:
+        try:
+            response = requests.post(f"{BACKEND_URL}/create_session")
+            st.session_state.session_id = response.json().get("session_id")
+            if not st.session_state.messages:
+                st.session_state.messages = [{
+                    "role": "assistant",
+                    "content": "Hello! I can help you compare colleges. Ask me things like 'Compare MIT and Stanford for computer science'",
+                    "result": {"message": "Welcome to College Comparator"}
+                }]
+        except Exception as e:
+            st.error(f"Failed to create session: {str(e)}")
+            return
+
+    # Display all messages in the current conversation
+    for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
-            st.write(msg["content"])
-            if msg.get("result"):
+            if msg["role"] == "user":
+                st.write(msg["content"])
+            
+            elif msg.get("result"):
                 result = msg["result"]
                 
-                if result.get("message"):  # Early response
-                    st.warning(result["message"])
-                    continue
-                
-                # Display comparison results
-                st.write(result["response"])
+                if result.get("message"):
+                    st.write(result["message"])
+                elif result.get("response"):
+                    st.write(result["response"])
                 
                 if result.get("fallback_used"):
                     st.info(f"Note: {result['fallback_message']}")
                 
-                # Show comparison details in expanders
-                with st.expander("Comparison Details"):
-                    if result["colleges"]:
-                        st.write("**Colleges Compared:**")
-                        st.write(", ".join(result["colleges"]))
-                    
-                    if result["aspects"]:
-                        st.write("**Aspects Compared:**")
-                        st.write(", ".join(result["aspects"]))
-    
-    # New prompt input
+                # Add comparison details expander
+                if result.get("colleges") or result.get("aspects"):
+                    with st.expander("Comparison Details"):
+                        if result.get("colleges"):
+                            st.write("**Colleges Compared:**")
+                            st.write(", ".join(result["colleges"]))
+                        
+                        if result.get("aspects"):
+                            st.write("**Aspects Compared:**")
+                            st.write(", ".join(result["aspects"]))
+                
+                # Add action buttons for assistant responses
+                if msg["role"] == "assistant":
+                    col1, col2 = st.columns([1, 1])
+                    with col1:
+                        if st.button(f"📥 Download", key=f"download_{i}"):
+                            download_content = generate_report([msg])
+                            st.download_button(
+                                label="Confirm Download",
+                                data=download_content,
+                                file_name=f"college_comparison_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                                mime="text/plain",
+                                key=f"real_download_{i}"
+                            )
+                    with col2:
+                        if st.button(f"💾 Save", key=f"save_{i}"):
+                            # Create new conversation entry
+                            new_conv = {
+                                'id': len(st.session_state.conversations) + 1,
+                                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                'messages': [{
+                                    "role": m["role"],
+                                    "content": m["content"],
+                                    "result": m.get("result", {}).copy() if isinstance(m.get("result"), dict) else m.get("result")
+                                } for m in st.session_state.messages]
+                            }
+                            
+                            if 'conversations' not in st.session_state:
+                                st.session_state.conversations = []
+                            
+                            st.session_state.conversations.append(new_conv)
+                            st.toast("Conversation saved!", icon="✅")
+                            st.rerun()
+
+    # Handle new user input
     if prompt := st.chat_input("Example: 'Compare MIT and Stanford for computer science'"):
         st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        with st.chat_message("user"):
-            st.write(prompt)
         
         with st.spinner("Analyzing comparison..."):
             try:
@@ -291,7 +601,7 @@ def college_comparator_page():
                 result = response.json()
                 
                 # Format the assistant response
-                assistant_response = result["response"]
+                assistant_response = result.get("response", "No comparison results available")
                 
                 st.session_state.messages.append({
                     "role": "assistant",
@@ -303,21 +613,96 @@ def college_comparator_page():
             except Exception as e:
                 st.error(f"Error: {str(e)}")
 
+def university_rankings_page():
+    st.markdown("""
+    <style>
+        .stChatMessage, .stMarkdown, .stMarkdown p {
+            color: black !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Header with back button
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.title("University Rankings")
+        st.markdown("Ask about QS World University Rankings")
+    with col2:
+        if st.button("← Back to Home"):
+            st.session_state.current_page = "home"
+            st.rerun()
+    
+    # Initialize messages if not exists
+    if 'ranking_messages' not in st.session_state:
+        st.session_state.ranking_messages = [
+            {
+                "role": "assistant", 
+                "content": "I can answer questions about QS World University Rankings. Ask me things like:\n\n- What's MIT's ranking?\n- Show top 10 universities\n- Which university is ranked 5th?"
+            }
+        ]
+    
+    # Display chat messages
+    for msg in st.session_state.ranking_messages:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
+            if msg.get("additional_context"):
+                with st.expander("More context"):
+                    st.write(msg["additional_context"])
+    
+    # Handle user input
+    if prompt := st.chat_input("Ask about university rankings..."):
+        # Add user message
+        st.session_state.ranking_messages.append({"role": "user", "content": prompt})
+        
+        with st.spinner("Checking rankings..."):
+            try:
+                # Call the backend endpoint
+                response = requests.post(
+                    f"{BACKEND_URL}/university_rankings",
+                    json={"question": prompt}
+                )
+                result = response.json()
+                
+                # Add assistant response
+                assistant_msg = {
+                    "role": "assistant",
+                    "content": result["answer"]
+                }
+                
+                if result.get("additional_context"):
+                    assistant_msg["additional_context"] = result["additional_context"]
+                
+                st.session_state.ranking_messages.append(assistant_msg)
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Error getting rankings: {str(e)}")
+                st.session_state.ranking_messages.append({
+                    "role": "assistant",
+                    "content": "Sorry, I couldn't retrieve the rankings. Please try again."
+                })
+                st.rerun()
+
+
 def main():
     local_css("style.css")
     
-    # Handle navigation from button click
-    if st.session_state.get('navigate_to_recommender'):
-        st.session_state.current_page = "college_recommender"
-        del st.session_state['navigate_to_recommender']
+    # Handle ranking button click
+    if st.session_state.get('show_ranking_chat') is None:
+        st.session_state.show_ranking_chat = False
+    
+    if st.session_state.get('navigate_to') == 'show_ranking_chat':
+        st.session_state.show_ranking_chat = not st.session_state.show_ranking_chat
         st.rerun()
         
     if st.session_state.current_page == "home":
         home_page()
     elif st.session_state.current_page == "college_recommender":
         college_recommender_page()
-    elif st.session_state.current_page == "college_comparator":  # Add this condition
+    elif st.session_state.current_page == "college_comparator":
         college_comparator_page()
+    elif st.session_state.current_page == "university_rankings":  # Add this condition
+        university_rankings_page()
 
 
 if __name__ == "__main__":
