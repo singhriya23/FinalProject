@@ -15,7 +15,7 @@ PINECONE_INDEX_NAME = "college-recommendations"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 EMBED_MODEL_NAME = "all-MiniLM-L6-v2"
 
-# ---------- Setup ----------
+
 embedder = SentenceTransformer(EMBED_MODEL_NAME)
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index = pc.Index(PINECONE_INDEX_NAME)
