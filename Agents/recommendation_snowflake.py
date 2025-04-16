@@ -1,5 +1,6 @@
 import os
 import re
+import datetime
 from dotenv import load_dotenv
 import snowflake.connector
 from langchain_openai import ChatOpenAI
@@ -7,53 +8,35 @@ from langgraph.graph import Graph
 
 load_dotenv()
 
-# ------------------------- CONFIGS --------------------------
 COLUMN_MAPPING = {
-    "fee": "TUITION_FEES",
-    "cost": "TUITION_FEES",
-    "price": "TUITION_FEES",
-    "tuition": "TUITION_FEES",
-    "gpa": "MINIMUM_GPA",
-    "graduate enrollment": "GRADUATE_ENROLLMENT",
-    "undergraduate enrollment": "UNDERGRADUATE_ENROLLMENT",
-    "college": "COLLEGE_NAME",
-    "university": "COLLEGE_NAME",
-    "location": "LOCATION",
-    "setting": "COLLEGE_SETTING",
-    "class size": "AVERAGE_CLASS_SIZE",
     "deadline": "APPLICATION_DEADLINE",
-    "ranking": "RANKING",
+    "gpa": "MINIMUM_GPA",
     "sat": "SAT_RANGE",
-    "act": "ACT_RANGE",
+    "fee": "TUITION_FEES",
+    "ranking": "RANKING",
     "acceptance": "ACCEPTANCE_RATE",
-    "salary": "MEDIAN_SALARY_AFTER_GRADUATION",
-    "food": "FOOD_AND_HOUSING",
-    "housing": "FOOD_AND_HOUSING",
     "graduation": "GRADUATION_RATE",
-    "affordable": "TUITION_FEES"
+    "salary": "MEDIAN_SALARY_AFTER_GRADUATION",
+    "enrollment": "UNDERGRADUATE_ENROLLMENT",
 }
 
 COLLEGE_TABLE = "TOP_30.UNIVERSITY_LIST"
 
 SHORT_COLUMN_NAMES = {
     "COLLEGE_NAME": "Name",
+    "APPLICATION_DEADLINE": "Deadline",
     "TUITION_FEES": "Fee",
     "GRADUATION_RATE": "Grad Rate",
     "RANKING": "Rank",
     "SAT_RANGE": "SAT",
-    "ACT_RANGE": "ACT",
     "MINIMUM_GPA": "GPA",
     "ACCEPTANCE_RATE": "Acceptance",
-    "MEDIAN_SALARY_AFTER_GRADUATION": "Salary"
+    "MEDIAN_SALARY_AFTER_GRADUATION": "Salary",
+    "UNDERGRADUATE_ENROLLMENT": "Undergrad Enrollment"
 }
 
-DEFAULT_COLUMNS = [
-    "COLLEGE_NAME", "RANKING", "TUITION_FEES", "GRADUATION_RATE",
-    "MINIMUM_GPA", "SAT_RANGE", "ACT_RANGE", "ACCEPTANCE_RATE",
-    "MEDIAN_SALARY_AFTER_GRADUATION"
-]
+DEFAULT_COLUMNS = list(SHORT_COLUMN_NAMES.keys())
 
-# ---------------------- SNOWFLAKE QUERY ----------------------
 def query_snowflake(query: str) -> list:
     conn = snowflake.connector.connect(
         user=os.getenv("SNOWFLAKE_USER"),
@@ -70,7 +53,6 @@ def query_snowflake(query: str) -> list:
     conn.close()
     return [dict(zip(columns, row)) for row in results]
 
-# ---------------------- UTILITIES ----------------------
 def identify_relevant_columns(prompt: str) -> list:
     return [col for word, col in COLUMN_MAPPING.items() if word in prompt.lower()]
 
@@ -79,11 +61,7 @@ def extract_gpa_and_sat(prompt: str):
     sat_match = re.search(r"\b(\d{3,4})\b", prompt)
     gpa = float(gpa_match.group(1)) if gpa_match else None
     sat = int(sat_match.group(1)) if sat_match else None
-    if gpa and gpa > 4.5:
-        gpa = None
-    if sat and sat < 800:
-        sat = None
-    return gpa, sat
+    return gpa if gpa and gpa <= 4.5 else None, sat if sat and sat >= 800 else None
 
 def summarize_data_for_prompt(data: list) -> str:
     if not data:
@@ -94,63 +72,98 @@ def summarize_data_for_prompt(data: list) -> str:
         summary.append(" | ".join(line))
     return "\n".join(summary)
 
-# ---------------------- MAIN SEARCH ----------------------
+def parse_date_string(date_str):
+    try:
+        return datetime.datetime.strptime(date_str.strip(), "%B %d")
+    except Exception:
+        return None
+
+def parse_numeric_filters(prompt: str):
+    numeric_filters = []
+    patterns = [
+        (r"greater than \$?([\d,]+)", ">", "MEDIAN_SALARY_AFTER_GRADUATION"),
+        (r"less than \$?([\d,]+)", "<", "MEDIAN_SALARY_AFTER_GRADUATION"),
+        (r"salary.*over \$?([\d,]+)", ">", "MEDIAN_SALARY_AFTER_GRADUATION"),
+        (r"undergraduate enrollment less than ([\d,]+)", "<", "UNDERGRADUATE_ENROLLMENT"),
+        (r"undergraduate enrollment greater than ([\d,]+)", ">", "UNDERGRADUATE_ENROLLMENT"),
+    ]
+    for pattern, op, col in patterns:
+        match = re.search(pattern, prompt.lower())
+        if match:
+            num = int(match.group(1).replace(",", ""))
+            numeric_filters.append((col, op, num))
+    return numeric_filters
+
 def search_and_filter(prompt: str) -> list:
     relevant_columns = identify_relevant_columns(prompt)
     gpa, sat = extract_gpa_and_sat(prompt)
+    numeric_filters = parse_numeric_filters(prompt)
+    check_deadline = "deadline" in prompt.lower() and "after" in prompt.lower()
 
-    if not relevant_columns and (gpa or sat):
+    if not relevant_columns and (gpa or sat or check_deadline or numeric_filters):
         relevant_columns = DEFAULT_COLUMNS
-
     if "COLLEGE_NAME" not in relevant_columns:
         relevant_columns.append("COLLEGE_NAME")
-    if "LOCATION" not in relevant_columns:
-        relevant_columns.append("LOCATION")
-
-    columns_str = ", ".join(relevant_columns)
-    filter_condition = " AND ".join([f"{col} IS NOT NULL" for col in relevant_columns])
-    order_by = "ORDER BY RANKING ASC"
 
     query = f"""
-        SELECT {columns_str}
+        SELECT {', '.join(relevant_columns)}
         FROM {COLLEGE_TABLE}
-        WHERE {filter_condition}
-        {order_by}
+        WHERE {" AND ".join([f"{col} IS NOT NULL" for col in relevant_columns])}
+        ORDER BY RANKING ASC
         LIMIT 100
     """
-    try:
-        results = query_snowflake(query)
-    except Exception as e:
-        return [{"error": f"Query error: {e}"}]
+    results = query_snowflake(query)
 
-    # GPA or SAT filtering (OR logic)
+    # Convert fields to float before filtering
+    for row in results:
+        for col in ["UNDERGRADUATE_ENROLLMENT", "MEDIAN_SALARY_AFTER_GRADUATION"]:
+            try:
+                row[col] = float(row[col])
+            except:
+                row[col] = None
+
+    if check_deadline:
+        jan15 = datetime.datetime.strptime("January 15", "%B %d")
+        results = [
+            row for row in results
+            if "APPLICATION_DEADLINE" in row and parse_date_string(str(row["APPLICATION_DEADLINE"])) and
+               parse_date_string(str(row["APPLICATION_DEADLINE"])) > jan15
+        ]
+
     if gpa or sat:
         filtered = []
         for row in results:
-            gpa_match = False
-            sat_match = False
-
+            gpa_match = sat_match = False
             gpa_str = str(row.get("MINIMUM_GPA", "")).strip()
-            match = re.search(r"(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)", gpa_str)
+            match = re.search(r"(\d+(?:\.\d+)?)\s*[-–]?\s*(\d+(?:\.\d+)?)?", gpa_str)
             if match and gpa:
-                low, high = float(match.group(1)), float(match.group(2))
+                low = float(match.group(1))
+                high = float(match.group(2)) if match.group(2) else low
                 gpa_match = low <= gpa <= high
-            elif gpa_str.replace(".", "", 1).isdigit() and gpa:
+            elif gpa_str.replace(".", "", 1).isdigit():
                 gpa_match = gpa >= float(gpa_str)
-
             sat_str = str(row.get("SAT_RANGE", "")).strip()
-            match = re.search(r"(\d{3,4})\s*[-–]\s*(\d{3,4})", sat_str)
+            match = re.search(r"(\d{3,4})\s*[-–]?\s*(\d{3,4})?", sat_str)
             if match and sat:
-                low, high = int(match.group(1)), int(match.group(2))
+                low = int(match.group(1))
+                high = int(match.group(2)) if match.group(2) else low
                 sat_match = low <= sat <= high
-
             if gpa_match or sat_match:
                 filtered.append(row)
         results = filtered
 
+    if numeric_filters:
+        results = [
+            row for row in results
+            if all(
+                isinstance(row.get(col), (int, float)) and
+                ((op == ">" and row[col] > val) or (op == "<" and row[col] < val))
+                for col, op, val in numeric_filters
+            )
+        ]
+
     return results
 
-# ---------------------- LLM RESPONSE ----------------------
 def generate_recommendation(prompt: str, data: list) -> str:
     if not data:
         return "No data in our system match the prompt provided. Please use the web search agent for this query."
@@ -158,17 +171,17 @@ def generate_recommendation(prompt: str, data: list) -> str:
     summary = summarize_data_for_prompt(data)
     return llm.invoke(
         f"""You are a helpful assistant.
-Use only the following data to respond to the user query:
+Use only the following college data to respond:
 
 {summary}
 
-User Prompt: "{prompt}"
+User Prompt: {prompt}
 
-Respond concisely using only the colleges in the list above.
+Respond only using the colleges in the data. If none match all conditions, say so.
 """
     ).content
 
-# ---------------------- LANGGRAPH FLOW ----------------------
+# ---------------------- AGENT FLOW ----------------------
 def input_node(state):
     prompt = input("\n💬 What kind of colleges are you looking for?\n> ")
     return {"prompt": prompt}
