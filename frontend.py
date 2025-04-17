@@ -139,7 +139,7 @@ def display_conversation_history():
             start_new_chat()
         
         st.markdown("---")
-        st.markdown("### Saved Conversations")
+        st.markdown("<h3 style='color: white;'>Saved Conversations</h3>", unsafe_allow_html=True)
         
         if not st.session_state.get('conversations', []):
             st.info("No saved conversations yet")
@@ -202,37 +202,32 @@ def get_downloadable_content(result):
     return buffer.getvalue()
 
 def display_pure_response(result):
-    """Extracts and returns only the display-worthy text content from response"""
+    """Improved version to properly display web search results"""
     if not result:
         return ""
     
     if isinstance(result, dict):
-        # Case 1: Standard response with direct message/response fields
-        if result.get("message"):
-            return result["message"]
-        if result.get("response"):
-            return result["response"]
+        # Handle fallback notice
+        fallback_notice = ""
+        if result.get("fallback_used"):
+            fallback_notice = f"⚠️ {result.get('fallback_message', 'Showing web search results')}\n\n"
         
-        # Case 2: Nested data with combined_output (now under 'data' key)
-        if result.get("data", {}).get("combined_output"):
-            return result["data"]["combined_output"]
-        
-        # Case 3: Web results structure (now under 'data' key)
+        # Check for web results first
         if result.get("data", {}).get("web_results"):
             web_results = result["data"]["web_results"]
-            if isinstance(web_results, list):
-                # Extract all text fields from web_results
-                texts = []
+            if isinstance(web_results, list) and web_results:
+                response = fallback_notice
                 for item in web_results:
                     if isinstance(item, dict) and item.get("text"):
-                        texts.append(item["text"])
-                if texts:
-                    return "\n\n".join(texts)
+                        response += item["text"] + "\n\n"
+                return response.strip()
         
-        # Fallback for any other dictionary structure
-        return str(result)
+        # Fall back to message if available
+        if result.get("message"):
+            return fallback_notice + result["message"]
+        
+        return fallback_notice + "No response content available"
     
-    # Fallback for non-dict results (lists, strings, etc.)
     return str(result)
 
 def college_recommender_page():
@@ -287,7 +282,7 @@ def college_recommender_page():
     # Header with back button (main content area)
     col1, col2 = st.columns([4, 1])
     with col1:
-        st.title("College Recommendations")
+        st.markdown("<h1 style='color: black;'>College Recommendations</h1>", unsafe_allow_html=True)
     with col2:
         if st.button("← Back to Home"):
             st.session_state.current_page = "home"
@@ -297,7 +292,7 @@ def college_recommender_page():
 
     # Sidebar with conversation history
     with st.sidebar:
-        st.markdown("## Conversation History")
+        st.markdown("<h3 style='color: white;'>Conversation History</h3>", unsafe_allow_html=True)
         
         # New Chat button - clears current conversation without saving
         if st.button("🆕 New Chat", use_container_width=True):
@@ -310,7 +305,7 @@ def college_recommender_page():
                 st.error(f"Failed to create new session: {str(e)}")
         
         st.markdown("---")
-        st.markdown("### Saved Conversations")
+        st.markdown("<h3 style='color: white;'>Saved Conversations</h3>", unsafe_allow_html=True)
         
         if not st.session_state.get('conversations', []):
             st.info("No saved conversations yet")
@@ -324,7 +319,7 @@ def college_recommender_page():
                 
                 # Display each saved conversation with options
                 with st.expander(f"🗓️ {conv['timestamp']}"):
-                    st.caption(first_msg[:50] + ("..." if len(first_msg) > 50 else ""))
+                    st.markdown(f"<p style='color: white; font-size: 0.8rem;'>{first_msg[:50] + ('...' if len(first_msg) > 50 else '')}</p>", unsafe_allow_html=True)
                     col1, col2 = st.columns([3, 1])
                     with col1:
                         if st.button("Load", key=f"load_{conv['id']}"):
@@ -356,16 +351,16 @@ def college_recommender_page():
     # Display all messages in the current conversation
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
-            # Only show content if it exists (prevents duplicates)
             if msg["role"] == "user":
                 st.write(msg["content"])
-            
-            # Show response if available
-            elif msg.get("result"):
-                response_content = display_pure_response(msg["result"])
-                st.write(response_content)
+            elif msg["role"] == "assistant":
+                if msg.get("result"):
+                    response_content = display_pure_response(msg["result"])
+                    st.markdown(response_content)  # Use markdown for better formatting
+                else:
+                    st.write(msg["content"])
                 
-                # Add action buttons for assistant responses only
+                # Action buttons
                 if msg["role"] == "assistant":
                     col1, col2 = st.columns([1, 1])
                     with col1:
@@ -380,22 +375,13 @@ def college_recommender_page():
                             )
                     with col2:
                         if st.button(f"💾 Save", key=f"save_{i}"):
-                            # Create new conversation entry with current messages
                             new_conv = {
                                 'id': len(st.session_state.conversations) + 1,
                                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                'messages': [{
-                                    "role": m["role"],
-                                    "content": m["content"],
-                                    "result": m.get("result", {}).copy() if isinstance(m.get("result"), dict) else m.get("result")
-                                } for m in st.session_state.messages]
+                                'messages': [m.copy() for m in st.session_state.messages]
                             }
-                            
-                            # Initialize conversations if not exists
                             if 'conversations' not in st.session_state:
                                 st.session_state.conversations = []
-                            
-                            # Add to conversations
                             st.session_state.conversations.append(new_conv)
                             st.toast("Conversation saved!", icon="✅")
                             st.rerun()
@@ -414,7 +400,7 @@ def college_recommender_page():
                         "prompt": prompt,
                         "session_id": st.session_state.session_id
                     },
-                    timeout=30
+                    timeout=120
                 )
                 result = response.json()
                 

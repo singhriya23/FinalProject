@@ -6,7 +6,7 @@ import json
 from multi_Agents.websearch_agent import WebSearchRecommender
 from multi_Agents.gate_agent import CollegeRecommender
 from dotenv import load_dotenv
-from multi_Agents.validate_recommender import validate_and_compare  # Import the existing function
+from multi_Agents.validate_recommender import validate_and_compare
 
 load_dotenv()
 
@@ -133,21 +133,19 @@ async def query_combined_agent_node(state: RecommendationState):
         }
 
 async def check_results_node(state: RecommendationState):
-
-
     """Check if we should fall back to web search"""
-    print("\n🔍 State in check_results_node:")
-    print(f"Full state keys: {state.keys()}")
-    print(f"Snowflake results: {state.get('snowflake_results', [])[:1]}... (count: {len(state.get('snowflake_results', []))})")
-    print(f"RAG results: {state.get('rag_results', [])[:1]}... (count: {len(state.get('rag_results', []))})")
+    no_data = (not state.get('snowflake_results') and 
+               not state.get('rag_results'))
     
-    # Only fallback if we explicitly have no results
-    if not state.get('snowflake_results') and not state.get('rag_results'):
+    # Check if the combined output indicates no results
+    combined_empty = (state.get('combined_agent_results') and 
+                     "❌ No valid data found" in state['combined_agent_results'])
+    
+    if no_data or combined_empty:
         print("⚠️ Both Snowflake and RAG returned empty results")
         return {"should_fallback": True}
     
     return {"should_fallback": False}
-
 # 3. Web Search Node (corrected version)
 async def query_web_node(state: RecommendationState):
     """Process query with existing Web Search agent"""
@@ -264,7 +262,7 @@ async def test_workflow(query: str):
 
 if __name__ == "__main__":
     test_queries = [
-        "Show me computer science course requirements at MIT"
+        "What MBA programs does Stanford offer for finance specialization?"
     ]
     
     for query in test_queries:

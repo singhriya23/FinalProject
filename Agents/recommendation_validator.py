@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 from recommendation_snowflake import search_and_filter, generate_recommendation
-from RecommenderRAG_3 import PineconeRetriever, GPT4Recommender, CourseRecommenderAgent
+from multi_Agents.RecommenderRAG_3 import PineconeRetriever, GPT4Recommender, CourseRecommenderAgent
 from pinecone import Pinecone
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI

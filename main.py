@@ -75,32 +75,53 @@ async def get_recommendations(request: RecommendationRequest):
     response = {
         "success": True,
         "query": request.prompt,
-        "data": None,
-        "message": None,
-        "fallback_used": False
+        "message": None,  # Primary display message
+        "data": {
+            "colleges": [],
+            "documents": [],
+            "web_results": []
+        },
+        "fallback_used": False,
+        "fallback_message": ""
     }
 
     # Handle early responses
     if result.get("early_response"):
         response["message"] = result["early_response"]
-    else:
-        # Handle normal results
-        final_output = result.get("final_output", {})
-        response.update({
-            "data": {
-                "combined_output": final_output.get("combined_output"),
-                "colleges": final_output.get("snowflake", []),
-                "documents": final_output.get("rag", []),
-                "web_results": final_output.get("web", [])
-            },
-            "fallback_used": final_output.get("fallback_used", False),
-            "fallback_message": final_output.get("fallback_message", "")
-        })
+        return response
 
-        # Validate we actually got results
-        if not (final_output.get("snowflake") or final_output.get("rag") or final_output.get("web")):
-            response["success"] = False
-            response["message"] = "No results found for your query"
+    # Process normal results
+    final_output = result.get("final_output", {})
+    
+    # Extract the primary message content
+    primary_message = None
+    if final_output.get("combined_output"):
+        # Clean duplicate content from combined_output
+        primary_message = "\n".join(
+            dict.fromkeys(  # Remove duplicate lines while preserving order
+                final_output["combined_output"].split("\n")
+            )
+        )
+    
+    # Set the primary message
+    response["message"] = primary_message or "Here are some college recommendations for you"
+    
+    # Set the structured data
+    if final_output.get("snowflake"):
+        response["data"]["colleges"] = final_output["snowflake"]
+    if final_output.get("rag"):
+        response["data"]["documents"] = final_output["rag"]
+    if final_output.get("web"):
+        response["data"]["web_results"] = final_output["web"]
+    
+    # Handle fallback cases
+    response["fallback_used"] = final_output.get("fallback_used", False)
+    response["fallback_message"] = final_output.get("fallback_message", "")
+    
+    # Validate we actually got results
+    if not any([final_output.get("snowflake"), final_output.get("rag"), final_output.get("web")]):
+        response["success"] = False
+        response["message"] = "No results found for your query"
 
     # Store in session if available
     if request.session_id:
@@ -125,20 +146,19 @@ async def compare_colleges(request: RecommendationRequest):
 
     # Prepare initial state for comparison workflow
     initial_state = {
-        "user_query": request.prompt,
-        "is_college_related": None,
-        "safety_check_passed": None,
-        "is_comparison": None,
-        "colleges_to_compare": [],
-        "comparison_aspects": [],
-        "snowflake_results": [],
-        "rag_results": [],
-        "web_results": [],
-        "final_output": None,
-        "early_response": None,
-        "fallback_used": False,
-        "fallback_message": None
-    }
+    "user_query": request.prompt,
+    "is_college_related": None,
+    "safety_check_passed": None,
+    "is_comparison": None,
+    "colleges_to_compare": [],
+    "comparison_aspects": [],
+    "combined_results": None,  # Changed from snowflake_results
+    "web_results": [],
+    "final_output": None,
+    "early_response": None,
+    "fallback_used": False,
+    "fallback_message": None
+}
 
     # Execute the comparison workflow
     result = await comparison_workflow.ainvoke(initial_state)

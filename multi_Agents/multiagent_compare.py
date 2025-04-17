@@ -6,7 +6,7 @@ import json
 from multi_Agents.websearch_compare import WebSearchComparisonAgent
 from multi_Agents.gate_agent import CollegeRecommender
 from multi_Agents.college_compare import ComparisonDetector
-from multi_Agents.compare_validator import validate_and_compare_colleges
+from multi_Agents.integrated_validator import compare_validate
 
 class ComparisonState(TypedDict):
     user_query: str
@@ -84,20 +84,23 @@ async def query_combined_agent_node(state: ComparisonState):
     
     try:
         # Call the imported validation function
-        results = validate_and_compare_colleges(
-            prompt=state["user_query"],
-            colleges=state["colleges_to_compare"]
-        )
+        validation_result = compare_validate(state["user_query"])
+        
+        # Check for empty/None content specifically
+        if not validation_result.get('content') or validation_result['content'] in ('""', '""'):
+            return {
+                "combined_results": None,
+                "fallback_used": True,
+                "fallback_message": validation_result.get('error', "No valid comparison data found")
+            }
         
         return {
-            "combined_results": results["final_output"],
-            "fallback_used": results["source_used"] == "None",
-            "fallback_message": (
-                "No valid comparison data found" 
-                if results["source_used"] == "None" 
-                else None
-            )
+            "combined_results": validation_result['content'],
+            "source": validation_result.get('source'),
+            "fallback_used": False,
+            "fallback_message": None
         }
+            
     except Exception as e:
         print(f"❌ Combined agent error: {e}")
         return {
@@ -202,7 +205,7 @@ app = workflow.compile()
 
 async def test_workflow():
     test_cases = [
-        "Compare MIT and Stanford for computer science programs"
+        "Compare MIT and Boston University for computer science programs"
     ]
     
     for query in test_cases:

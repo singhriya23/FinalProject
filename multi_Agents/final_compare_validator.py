@@ -1,9 +1,8 @@
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
-
-from compare_snowflake import search_compare_data, generate_comparison
-from compareRAG import CollegeDocumentRetriever, GPT4CollegeComparator, resolve_college, index
+from multi_Agents.compare_snowflake import search_compare_data, generate_comparison
+from multi_Agents.compareRAG import CollegeDocumentRetriever, GPT4CollegeComparator, resolve_college, index
 
 # ---------- Load environment ----------
 load_dotenv("Agents/.env")

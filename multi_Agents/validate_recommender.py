@@ -1,59 +1,65 @@
-from dotenv import load_dotenv
-from multi_Agents.recommendation_snowflake import search_and_filter, generate_recommendation
-from multi_Agents.RecommenderRAG_2 import PineconeRetriever, GPT4Recommender, CourseRecommenderAgent
-from pinecone import Pinecone
-from sentence_transformers import SentenceTransformer
 import os
+from dotenv import load_dotenv
+from openai import OpenAI
 
-# ---------- Load environment ----------
+from multi_Agents.recommendation_snowflake import search_and_filter, generate_recommendation
+from multi_Agents.RecommenderRAG_4 import PineconeRetriever, GPT4Recommender, CourseRecommenderAgent, index
+
+# ---------- Load Environment ----------
 load_dotenv("Agents/.env")
-PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-PINECONE_INDEX_NAME = "college-recommendations"
-EMBED_MODEL_NAME = "all-MiniLM-L6-v2"
-
-# ---------- Setup ----------
-embedder = SentenceTransformer(EMBED_MODEL_NAME)
-pc = Pinecone(api_key=PINECONE_API_KEY)
-index = pc.Index(PINECONE_INDEX_NAME)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 # ---------- Initialize Agents ----------
 retriever = PineconeRetriever(index)
 gpt4 = GPT4Recommender()
 rag_agent = CourseRecommenderAgent(retriever, gpt4)
 
-# ---------- Validator Function (Updated Structure) ----------
+# ---------- Validator Agent with Code 2 Output Structure ----------
 def validate_and_compare(prompt: str) -> dict:
-    # Run Snowflake Agent
+    # Get responses from both agents
     snowflake_data = search_and_filter(prompt)
     snowflake_response = generate_recommendation(prompt, snowflake_data) if snowflake_data else None
-
-    # Run RAG Agent
     rag_response = rag_agent.recommend(prompt)
-    rag_clean = [r.strip() for r in rag_response.split("\n") if "⚠️" not in r and r.strip()] if rag_response else []
 
-    # Final Fallback
-    if not snowflake_data and not rag_clean:
-        return {
-            "combined_agent_results": "❌ No valid data found in either Snowflake or RAG system. Please refine your query or use web search.",
-            "snowflake_results": [],
-            "rag_results": [],
-        }
+    # Process RAG response to match Code 2 structure
+    rag_clean = []
+    if rag_response and "no relevant course information" not in rag_response.lower():
+        rag_clean = [r.strip() for r in rag_response.split("\n") if "⚠️" not in r and r.strip()]
 
-    merged_sections = []
+    # Generate combined response using GPT-4 (Code 1 approach)
+    combined_prompt = f"""
+You are a university and course recommendation validator.
 
-    if snowflake_data:
-        merged_sections.append("📊 **Structured College Recommendations (from Snowflake):**\n")
-        merged_sections.append(snowflake_response.strip())
+USER PROMPT:
+{prompt}
 
-    if rag_clean:
-        merged_sections.append("📘 **Relevant Course or Document Results (from RAG PDFs):**\n")
-        for course in rag_clean:
-            merged_sections.append(f"- {course}")
+SNOWFLAKE AGENT OUTPUT:
+{snowflake_response if snowflake_response else '[No result]'}
 
+RAG AGENT OUTPUT:
+{rag_response if rag_response else '[No result]'}
+
+TASK:
+Read the user prompt and the outputs from both agents.
+
+1. If either output contains information relevant to the user prompt, generate a clean, well-formatted answer using the data provided.
+2. If neither output is relevant to the user prompt, return an empty string only.
+"""
+    
+    gpt_response = openai_client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": combined_prompt}],
+        temperature=0.4
+    )
+    final_response = gpt_response.choices[0].message.content.strip()
+
+    # Return in Code 2 output structure
     return {
-        "combined_agent_results": "\n\n".join(merged_sections),
-        "snowflake_results": snowflake_data,  # Raw Snowflake data (original structure)
-        "rag_results": [{"text": course, "metadata": {"source": "rag"}} for course in rag_clean]  # RAG as list of dicts
+        "combined_agent_results": final_response if final_response else 
+            "❌ No valid data found in either Snowflake or RAG system. Please refine your query or use web search.",
+        "snowflake_results": snowflake_data if snowflake_data else [],
+        "rag_results": [{"text": course, "metadata": {"source": "rag"}} for course in rag_clean]
     }
 
 # ---------- CLI for Interactive Testing ----------
