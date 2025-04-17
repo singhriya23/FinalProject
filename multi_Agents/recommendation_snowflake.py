@@ -32,7 +32,8 @@ SHORT_COLUMN_NAMES = {
     "MINIMUM_GPA": "GPA",
     "ACCEPTANCE_RATE": "Acceptance",
     "MEDIAN_SALARY_AFTER_GRADUATION": "Salary",
-    "UNDERGRADUATE_ENROLLMENT": "Undergrad Enrollment"
+    "UNDERGRADUATE_ENROLLMENT": "Undergrad Enrollment",
+    "LOCATION": "Location"
 }
 
 DEFAULT_COLUMNS = list(SHORT_COLUMN_NAMES.keys())
@@ -63,9 +64,23 @@ def extract_gpa_and_sat(prompt: str):
     sat = int(sat_match.group(1)) if sat_match else None
     return gpa if gpa and gpa <= 4.5 else None, sat if sat and sat >= 800 else None
 
+def extract_location_state_abbr(prompt: str) -> str:
+    state_map = {
+        "california": "CA", "texas": "TX", "new york": "NY", "massachusetts": "MA",
+        "illinois": "IL", "florida": "FL", "georgia": "GA", "pennsylvania": "PA",
+        "north carolina": "NC", "michigan": "MI", "virginia": "VA", "washington": "WA",
+        "ohio": "OH", "arizona": "AZ", "ca": "CA", "tx": "TX", "ny": "NY", "ma": "MA",
+        "il": "IL", "fl": "FL", "ga": "GA", "pa": "PA", "nc": "NC", "mi": "MI",
+        "va": "VA", "wa": "WA", "oh": "OH", "az": "AZ"
+    }
+    for word in prompt.lower().split():
+        if word in state_map:
+            return state_map[word]
+    return ""
+
 def summarize_data_for_prompt(data: list) -> str:
     if not data:
-        return "No matching college data found."
+        return ""
     summary = []
     for row in data[:10]:
         line = [f"{SHORT_COLUMN_NAMES.get(col, col)}: {val}" for col, val in row.items() if val]
@@ -98,12 +113,15 @@ def search_and_filter(prompt: str) -> list:
     relevant_columns = identify_relevant_columns(prompt)
     gpa, sat = extract_gpa_and_sat(prompt)
     numeric_filters = parse_numeric_filters(prompt)
+    location_abbr = extract_location_state_abbr(prompt)
     check_deadline = "deadline" in prompt.lower() and "after" in prompt.lower()
 
     if not relevant_columns and (gpa or sat or check_deadline or numeric_filters):
         relevant_columns = DEFAULT_COLUMNS
     if "COLLEGE_NAME" not in relevant_columns:
         relevant_columns.append("COLLEGE_NAME")
+    if "LOCATION" not in relevant_columns:
+        relevant_columns.append("LOCATION")
 
     query = f"""
         SELECT {', '.join(relevant_columns)}
@@ -114,7 +132,6 @@ def search_and_filter(prompt: str) -> list:
     """
     results = query_snowflake(query)
 
-    # Convert fields to float before filtering
     for row in results:
         for col in ["UNDERGRADUATE_ENROLLMENT", "MEDIAN_SALARY_AFTER_GRADUATION"]:
             try:
@@ -133,21 +150,16 @@ def search_and_filter(prompt: str) -> list:
     if gpa or sat:
         filtered = []
         for row in results:
-            gpa_match = sat_match = False
-            gpa_str = str(row.get("MINIMUM_GPA", "")).strip()
-            match = re.search(r"(\d+(?:\.\d+)?)\s*[-–]?\s*(\d+(?:\.\d+)?)?", gpa_str)
-            if match and gpa:
-                low = float(match.group(1))
-                high = float(match.group(2)) if match.group(2) else low
-                gpa_match = low <= gpa <= high
-            elif gpa_str.replace(".", "", 1).isdigit():
-                gpa_match = gpa >= float(gpa_str)
+            gpa_match = True  # ✅ always pass GPA
+            sat_match = False
+
             sat_str = str(row.get("SAT_RANGE", "")).strip()
             match = re.search(r"(\d{3,4})\s*[-–]?\s*(\d{3,4})?", sat_str)
             if match and sat:
                 low = int(match.group(1))
                 high = int(match.group(2)) if match.group(2) else low
                 sat_match = low <= sat <= high
+
             if gpa_match or sat_match:
                 filtered.append(row)
         results = filtered
@@ -162,11 +174,17 @@ def search_and_filter(prompt: str) -> list:
             )
         ]
 
+    if location_abbr:
+        results = [
+            row for row in results
+            if "LOCATION" in row and re.search(rf",\s*{location_abbr}\b", row["LOCATION"], flags=re.IGNORECASE)
+        ]
+
     return results
 
 def generate_recommendation(prompt: str, data: list) -> str:
     if not data:
-        return "No data in our system match the prompt provided. Please use the web search agent for this query."
+        return ""
     llm = ChatOpenAI(model="gpt-4", temperature=0.3)
     summary = summarize_data_for_prompt(data)
     return llm.invoke(
@@ -177,7 +195,7 @@ Use only the following college data to respond:
 
 User Prompt: {prompt}
 
-Respond only using the colleges in the data. If none match all conditions, say so.
+Respond only using the colleges in the data. If none match all conditions, return an empty string.
 """
     ).content
 
@@ -198,8 +216,9 @@ def generate_response_node(state):
     return {"response": reply}
 
 def output_node(state):
-    print("\n📘 RECOMMENDED COLLEGES:\n")
-    print(state["response"])
+    if state["response"]:
+        print("\n📘 RECOMMENDED COLLEGES:\n")
+        print(state["response"])
     return state
 
 recommendation_graph = Graph()
