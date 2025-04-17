@@ -1,6 +1,7 @@
 import os
+import re
 from dotenv import load_dotenv
-from typing import List
+from typing import List, Dict
 from pinecone import Pinecone
 from sentence_transformers import SentenceTransformer
 from langchain.schema import Document
@@ -19,69 +20,144 @@ pc = Pinecone(api_key=PINECONE_API_KEY)
 index = pc.Index(PINECONE_INDEX_NAME)
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
-# ---------- College Document Retriever with Top-K Limit ----------
-def get_documents_by_college(college_name: str, top_k: int = 5) -> List[Document]:
-    result = index.query(
-        vector=[0.0] * 384,  # dummy vector just to allow filtering
-        top_k=top_k,
-        include_metadata=True,
-        filter={"college_name": {"$eq": college_name}}
-    )
+# ---------- Normalization ----------
+def normalize(text: str) -> str:
+    return re.sub(r"\s+", "", text.lower().strip())
 
-    matches = result.get("matches", [])
-    return [
-        Document(
-            page_content=m["metadata"].get("text", ""),
-            metadata=m["metadata"]
+# ---------- College Resolver ----------
+def resolve_college(input_name: str, known_colleges: List[str], alias_map: Dict[str, str]) -> str:
+    input_norm = normalize(input_name)
+    for full, alias in alias_map.items():
+        if normalize(full) == input_norm:
+            return alias
+    for college in known_colleges:
+        if normalize(college) == input_norm:
+            return college
+    return None
+
+# ---------- Document Retriever ----------
+class CollegeDocumentRetriever:
+    def __init__(self, pinecone_index, top_k=5):
+        self._index = pinecone_index
+        self._top_k = top_k
+
+        self.known_colleges = [
+            "MIT", "Stanford", "Harvard", "UCLA", "UCSD", "UC Berkeley", "Columbia", "Gatech",
+            "UWashington", "Yale", "Cornell", "CMU", "USC", "Princeton", "Georgetown",
+            "University of Virginia", "BU", "EmoryUniversity", "University of Michigan",
+            "Northeastern", "NEU", "NorthwesternUniversity", "NYU", "UtAustin", "UFL", "UIC", "WPI",
+            "UNCC", "Upenn", "UCBerkeley", "Tufts"
+        ]
+
+        self.alias_map = {
+            "Massachusetts Institute of Technology": "MIT",
+            "Stanford University": "Stanford",
+            "Harvard University": "Harvard",
+            "University of California Los Angeles": "UCLA",
+            "University of California San Diego": "UCSD",
+            "University of California Berkeley": "UC Berkeley",
+            "Georgia Institute of Technology": "Gatech",
+            "University of Washington": "UWashington",
+            "Carnegie Mellon University": "CMU",
+            "University of Southern California": "USC",
+            "New York University": "NYU",
+            "University of Michigan": "University of Michigan",
+            "University of Florida": "UFL",
+            "University of Illinois Chicago": "UIC",
+            "University of North Carolina Charlotte": "UNCC",
+            "University of Texas at Austin": "UtAustin",
+            "University of Virginia": "University of Virginia",
+            "University of Pennsylvania": "Upenn",
+            "Northeastern University": "Northeastern",
+            "NEU": "Northeastern",
+            "Boston University": "BU",
+            "Emory University": "EmoryUniversity",
+            "Tufts University": "Tufts",
+            "Columbia University": "Columbia",
+            "Georgia Tech": "Gatech",
+            "Yale": "YaleUniv",
+            "Worcester Polytechnic Institute": "WPI",
+            "University of Illinois at Urbana-Champaign": "UIUC",
+            "Princeton University": "Princeton",
+            "Cornell University": "Cornell",
+            "Northwestern University": "NorthwesternUniversity"
+        }
+
+    def get_documents_for_college(self, college: str) -> List[Document]:
+        print(f"📚 Retrieving for: {college}")
+        result = self._index.query(
+            vector=[0.0] * 384,
+            top_k=self._top_k,
+            include_metadata=True,
+            filter={
+                "college_name": {"$eq": college},
+                "type": {"$in": ["catalog", "courses"]}
+            }
         )
-        for m in matches
-    ]
+        return [
+            Document(
+                page_content=m["metadata"].get("text", ""),
+                metadata=m["metadata"]
+            )
+            for m in result.get("matches", [])
+        ]
 
 # ---------- GPT-4 Comparator ----------
-def compare_colleges_on_prompt(prompt: str, college_docs: dict) -> str:
-    context = "\n\n".join([
-        f"""College: {college}
-Text: {' '.join([doc.page_content for doc in docs])}"""
-        for college, docs in college_docs.items()
-    ])
+class GPT4CollegeComparator:
+    def __init__(self, model="gpt-4"):
+        self.model = model
 
-    full_prompt = f"""
-You are a helpful educational assistant. A student wants to compare universities based on the following request:
+    def compare(self, clg1: str, clg2: str, prompt: str, college_docs: Dict[str, List[Document]]) -> str:
+        context = "\n\n".join([
+            f"""College: {college}
+Source: {doc.metadata.get("source", "N/A")}
+Text: {doc.page_content.strip()}"""
+            for college, docs in college_docs.items()
+            for doc in docs
+        ])
+
+        full_prompt = f"""
+You are a college comparator. A student has asked to compare:
+
+"{clg1}" and "{clg2}" on:
 
 "{prompt}"
 
-Below is the course and program information for each college:
+You have access to the following university course and catalog data:
 
-{context}
+{context if context else '[No direct content found. Please use general knowledge for a fair comparison.]'}
 
-Please compare the colleges based on the student's request. Clearly list the pros/cons of each, and recommend which might be better depending on the student's goal.
+Please compare these two colleges thoroughly based on the above prompt.
 """
 
-    response = openai_client.chat.completions.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": full_prompt}],
-        temperature=0.7
-    )
-    return response.choices[0].message.content.strip()
+        response = openai_client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": full_prompt}],
+            temperature=0.7
+        )
+        return response.choices[0].message.content.strip()
 
-# ---------- CLI for Testing ----------
+# ---------- CLI ----------
 if __name__ == "__main__":
-    colleges_input = input("🏫 Enter college names to compare (comma-separated):\n> ")
-    colleges = [c.strip() for c in colleges_input.split(",") if c.strip()]
+    retriever = CollegeDocumentRetriever(index)
+    comparator = GPT4CollegeComparator()
 
-    prompt = input("\n🔍 What do you want to compare them on?\n> ").strip()
+    clg1_input = input("🏫 Enter first college name: ").strip()
+    clg2_input = input("🏫 Enter second college name: ").strip()
+    prompt = input("🔍 What do you want to compare them on?\n> ").strip()
 
-    college_docs = {}
-    for college in colleges:
-        docs = get_documents_by_college(college, top_k=5)  # Limit to top 5 documents
-        if docs:
-            college_docs[college] = docs
-        else:
-            print(f"⚠️ No documents found for {college}")
+    clg1 = resolve_college(clg1_input, retriever.known_colleges, retriever.alias_map)
+    clg2 = resolve_college(clg2_input, retriever.known_colleges, retriever.alias_map)
 
-    if not college_docs:
-        print("❌ No valid college data found in Pinecone.")
-    else:
-        result = compare_colleges_on_prompt(prompt, college_docs)
-        print("\n📊 GPT-4 COMPARISON RESULT:\n")
-        print(result)
+    if not clg1 or not clg2:
+        print("❌ Unable to resolve one or both college names. Please try again.")
+        exit()
+
+    docs1 = retriever.get_documents_for_college(clg1)
+    docs2 = retriever.get_documents_for_college(clg2)
+
+    college_docs = {clg1: docs1, clg2: docs2}
+
+    result = comparator.compare(clg1, clg2, prompt, college_docs)
+    print("\n📊 GPT-4 COMPARISON RESULT:\n")
+    print(result)

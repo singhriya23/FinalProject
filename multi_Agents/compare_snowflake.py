@@ -19,7 +19,10 @@ COLUMN_MAPPING = {
     "acceptance": "ACCEPTANCE_RATE",
     "graduation": "GRADUATION_RATE",
     "ranking": "RANKING",
-    "enrollment": "UNDERGRADUATE_ENROLLMENT"
+    "enrollment": "UNDERGRADUATE_ENROLLMENT",
+    "location": "LOCATION",
+    "class size": "AVERAGE_CLASS_SIZE",
+    "average class size": "AVERAGE_CLASS_SIZE"
 }
 
 COLLEGE_TABLE = "TOP_30.UNIVERSITY_LIST"
@@ -35,29 +38,12 @@ SHORT_COLUMN_NAMES = {
     "MINIMUM_GPA": "GPA",
     "ACCEPTANCE_RATE": "Acceptance",
     "MEDIAN_SALARY_AFTER_GRADUATION": "Salary",
-    "UNDERGRADUATE_ENROLLMENT": "Undergrad Enrollment"
+    "UNDERGRADUATE_ENROLLMENT": "Undergrad Enrollment",
+    "AVERAGE_CLASS_SIZE": "Class Size",
+    "LOCATION": "Location"
 }
 
 DEFAULT_COLUMNS = list(SHORT_COLUMN_NAMES.keys())
-
-COLLEGE_ALIASES = {
-    "mit": "Massachusetts Institute of Technology",
-    "harvard": "Harvard University",
-    "yale": "Yale University",
-    "princeton": "Princeton University",
-    "upenn": "University of Pennsylvania",
-    "penn": "University of Pennsylvania",
-    "dartmouth": "Dartmouth College",
-    "brown": "Brown University",
-    "columbia": "Columbia University",
-    "cornell": "Cornell University",
-    "stanford": "Stanford University",
-    "nyu": "New York University",
-    "ucla": "University of California – Los Angeles",
-    "uc berkeley": "University of California – Berkeley",
-    "ucsd": "University of California – San Diego",
-    "northeastern": "Northeastern University"
-}
 
 def query_snowflake(query: str) -> list:
     conn = snowflake.connector.connect(
@@ -75,28 +61,6 @@ def query_snowflake(query: str) -> list:
     conn.close()
     return [dict(zip(columns, row)) for row in results]
 
-def extract_college_names(prompt: str) -> list:
-    prompt_lower = prompt.lower()
-    matched = []
-    for alias, full in COLLEGE_ALIASES.items():
-        if alias in prompt_lower:
-            matched.append(full)
-    all_colleges = [row["COLLEGE_NAME"] for row in query_snowflake(f"SELECT DISTINCT COLLEGE_NAME FROM {COLLEGE_TABLE}")]
-    for name in all_colleges:
-        if name.lower() in prompt_lower and name not in matched:
-            matched.append(name)
-    return list(set(matched))
-
-def identify_relevant_columns(prompt: str) -> list:
-    return [col for word, col in COLUMN_MAPPING.items() if word in prompt.lower()]
-
-def extract_gpa_and_sat(prompt: str):
-    gpa_match = re.search(r"\b(\d\.\d{1,2})\b", prompt)
-    sat_match = re.search(r"\b(\d{3,4})\b", prompt)
-    gpa = float(gpa_match.group(1)) if gpa_match else None
-    sat = int(sat_match.group(1)) if sat_match else None
-    return gpa if gpa and gpa <= 4.5 else None, sat if sat and sat >= 800 else None
-
 def parse_date_string(date_str):
     try:
         return datetime.datetime.strptime(date_str.strip(), "%B %d")
@@ -106,6 +70,7 @@ def parse_date_string(date_str):
 def parse_numeric_filters(prompt: str):
     filters = []
     patterns = [
+        (r"(greater than|above) (\d+)%", ">", "ACCEPTANCE_RATE"),
         (r"greater than \$?([\d,]+)", ">", "MEDIAN_SALARY_AFTER_GRADUATION"),
         (r"less than \$?([\d,]+)", "<", "MEDIAN_SALARY_AFTER_GRADUATION"),
         (r"undergraduate enrollment less than ([\d,]+)", "<", "UNDERGRADUATE_ENROLLMENT"),
@@ -114,18 +79,17 @@ def parse_numeric_filters(prompt: str):
     for pattern, op, col in patterns:
         match = re.search(pattern, prompt.lower())
         if match:
-            num = int(match.group(1).replace(",", ""))
+            value = match.group(2) if len(match.groups()) > 1 else match.group(1)
+            num = int(value.replace(",", ""))
             filters.append((col, op, num))
     return filters
 
 def search_compare_data(prompt: str) -> list:
-    colleges = extract_college_names(prompt)
-    if len(colleges) < 2:
-        print("⚠️ Not enough college names matched.")
-        return []
-
-    cols = identify_relevant_columns(prompt)
-    gpa, sat = extract_gpa_and_sat(prompt)
+    cols = [col for word, col in COLUMN_MAPPING.items() if word in prompt.lower()]
+    gpa_match = re.search(r"\b(\d\.\d{1,2})\b", prompt)
+    sat_match = re.search(r"\b(\d{3,4})\b", prompt)
+    gpa = float(gpa_match.group(1)) if gpa_match else None
+    sat = int(sat_match.group(1)) if sat_match else None
     numeric_filters = parse_numeric_filters(prompt)
     check_deadline = "deadline" in prompt.lower() and "after" in prompt.lower()
 
@@ -138,8 +102,7 @@ def search_compare_data(prompt: str) -> list:
     if check_deadline and "APPLICATION_DEADLINE" not in cols:
         cols.append("APPLICATION_DEADLINE")
 
-    filter_str = " OR ".join([f"COLLEGE_NAME ILIKE '%{name}%'" for name in colleges])
-    query = f"SELECT {', '.join(cols)} FROM {COLLEGE_TABLE} WHERE {filter_str}"
+    query = f"SELECT {', '.join(cols)} FROM {COLLEGE_TABLE}"
     results = query_snowflake(query)
 
     for row in results:
@@ -148,6 +111,10 @@ def search_compare_data(prompt: str) -> list:
                 row[key] = float(row[key])
             except:
                 row[key] = None
+
+        if "ACCEPTANCE_RATE" in row and isinstance(row["ACCEPTANCE_RATE"], str):
+            match = re.search(r"(\d+)", row["ACCEPTANCE_RATE"])
+            row["ACCEPTANCE_RATE"] = int(match.group(1)) if match else None
 
     if check_deadline:
         jan15 = datetime.datetime.strptime("January 15", "%B %d")
@@ -187,6 +154,20 @@ def search_compare_data(prompt: str) -> list:
             if isinstance(row.get(col), (int, float)) and (
                 (op == ">" and row[col] > val) or (op == "<" and row[col] < val)
             )
+        ]
+
+    if "class size" in prompt.lower() and "below" in prompt.lower():
+        results = [
+            row for row in results
+            if "AVERAGE_CLASS_SIZE" in row and any(
+                limit in row["AVERAGE_CLASS_SIZE"] for limit in ["10 – 20", "10-20"]
+            )
+        ]
+
+    if "california" in prompt.lower():
+        results = [
+            row for row in results
+            if "LOCATION" in row and ", ca" in row["LOCATION"].lower()
         ]
 
     return results
