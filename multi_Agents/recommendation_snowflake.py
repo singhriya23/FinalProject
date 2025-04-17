@@ -96,6 +96,11 @@ def parse_date_string(date_str):
 def parse_numeric_filters(prompt: str):
     numeric_filters = []
     patterns = [
+        (r"tuition.*under \$?([\d,]+)", "<", "TUITION_FEES"),
+        (r"tuition.*less than \$?([\d,]+)", "<", "TUITION_FEES"),
+        (r"tuition.*greater than \$?([\d,]+)", ">", "TUITION_FEES"),
+        (r"acceptance.*greater than ?([\d]{1,3})%?", ">", "ACCEPTANCE_RATE"),
+        (r"acceptance.*less than ?([\d]{1,3})%?", "<", "ACCEPTANCE_RATE"),
         (r"greater than \$?([\d,]+)", ">", "MEDIAN_SALARY_AFTER_GRADUATION"),
         (r"less than \$?([\d,]+)", "<", "MEDIAN_SALARY_AFTER_GRADUATION"),
         (r"salary.*over \$?([\d,]+)", ">", "MEDIAN_SALARY_AFTER_GRADUATION"),
@@ -105,8 +110,11 @@ def parse_numeric_filters(prompt: str):
     for pattern, op, col in patterns:
         match = re.search(pattern, prompt.lower())
         if match:
-            num = int(match.group(1).replace(",", ""))
-            numeric_filters.append((col, op, num))
+            try:
+                num = int(match.group(1).replace(",", ""))
+                numeric_filters.append((col, op, num))
+            except:
+                pass
     return numeric_filters
 
 def search_and_filter(prompt: str) -> list:
@@ -133,9 +141,10 @@ def search_and_filter(prompt: str) -> list:
     results = query_snowflake(query)
 
     for row in results:
-        for col in ["UNDERGRADUATE_ENROLLMENT", "MEDIAN_SALARY_AFTER_GRADUATION"]:
+        for col in ["UNDERGRADUATE_ENROLLMENT", "MEDIAN_SALARY_AFTER_GRADUATION", "TUITION_FEES", "ACCEPTANCE_RATE"]:
             try:
-                row[col] = float(row[col])
+                val = str(row[col]).replace(",", "").replace("$", "").replace("%", "")
+                row[col] = float(val)
             except:
                 row[col] = None
 
@@ -150,8 +159,15 @@ def search_and_filter(prompt: str) -> list:
     if gpa or sat:
         filtered = []
         for row in results:
-            gpa_match = True  # ✅ always pass GPA
+            gpa_match = False
             sat_match = False
+
+            try:
+                row_gpa = float(row.get("MINIMUM_GPA", 0))
+                if gpa and row_gpa <= gpa:
+                    gpa_match = True
+            except:
+                pass
 
             sat_str = str(row.get("SAT_RANGE", "")).strip()
             match = re.search(r"(\d{3,4})\s*[-–]?\s*(\d{3,4})?", sat_str)
@@ -160,14 +176,16 @@ def search_and_filter(prompt: str) -> list:
                 high = int(match.group(2)) if match.group(2) else low
                 sat_match = low <= sat <= high
 
-            if gpa_match or sat_match:
+            if (gpa and gpa_match) or (sat and sat_match):
                 filtered.append(row)
+
         results = filtered
 
     if numeric_filters:
         results = [
             row for row in results
             if all(
+                row.get(col) is not None and
                 isinstance(row.get(col), (int, float)) and
                 ((op == ">" and row[col] > val) or (op == "<" and row[col] < val))
                 for col, op, val in numeric_filters
