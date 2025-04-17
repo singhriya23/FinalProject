@@ -23,48 +23,17 @@ class RecommendationState(TypedDict):
     fallback_used: Optional[bool]
     fallback_message: Optional[str]
 
-def save_to_markdown(query: str, results: Dict, filename: str = "agent_outputs.md"):
-    with open(filename, "w") as f:
-        f.write(f"# Agent Outputs Report\n\n")
-        f.write(f"**Generated at:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        f.write(f"**User Query:** `{query}`\n\n")
-        
-        # Snowflake Results
-        f.write("## Snowflake Results\n")
-        f.write(f"Found {len(results['snowflake'])} colleges\n\n")
-        for college in results['snowflake']:
-            f.write(f"### {college.get('COLLEGE_NAME', 'Unknown')}\n")
-            f.write("```json\n")
-            f.write(json.dumps(college, indent=2))
-            f.write("\n```\n\n")
-        
-        # RAG Results
-        f.write("## RAG Results\n")
-        f.write(f"Found {len(results['rag'])} documents\n\n")
-        for doc in results['rag']:
-            f.write("### Document\n")
-            f.write(f"**Text excerpt:** {doc.get('text', '')[:200]}...\n\n")
-            f.write("**Metadata:**\n```json\n")
-            f.write(json.dumps(doc.get('metadata', {}), indent=2))
-            f.write("\n```\n\n")
-        
-        # Web Results
-        f.write("## Web Search Results\n")
-        f.write(f"Found {len(results['web'])} results\n\n")
-        for result in results['web']:
-            f.write("### Result\n")
-            f.write(f"```json\n")
-            f.write(json.dumps(result, indent=2))
-            f.write("\n```\n\n")
 
-# Initialize the graph
+
+
 workflow = StateGraph(RecommendationState)
 
-# Initialize at the start
+
 college_recommender = CollegeRecommender()
 
+#node to check the prompt for non college related queries
 async def check_prompt_node(state: RecommendationState):
-    """Gatekeeper node using consolidated classifier with debug output"""
+
     STANDARD_RESPONSE = "Sorry I can't do that. I can assist you with college recommendations."
     
     print(f"\n🔍 Processing query: '{state['user_query']}'")
@@ -93,6 +62,7 @@ async def check_prompt_node(state: RecommendationState):
         "safety_check_passed": True
     }
 
+#output from our rag and snowflake agents
 async def query_combined_agent_node(state: RecommendationState):
     '''
     """TEST VERSION - Always returns empty results to trigger fallback"""
@@ -115,7 +85,7 @@ async def query_combined_agent_node(state: RecommendationState):
         print(f"RAG results type: {type(result.get('rag_results'))} count: {len(result.get('rag_results', []))}")
 
         return {
-            **state,  # Preserve existing state
+            **state,  
             "combined_agent_results": result["combined_agent_results"],
             "snowflake_results": result.get("snowflake_results", []),
             "rag_results": result.get("rag_results", []),
@@ -132,12 +102,13 @@ async def query_combined_agent_node(state: RecommendationState):
             "fallback_message": "Error processing your request"
         }
 
+#checking output for fallback trigger
 async def check_results_node(state: RecommendationState):
     """Check if we should fall back to web search"""
     no_data = (not state.get('snowflake_results') and 
                not state.get('rag_results'))
     
-    # Check if the combined output indicates no results
+
     combined_empty = (state.get('combined_agent_results') and 
                      "❌ No valid data found" in state['combined_agent_results'])
     
@@ -146,14 +117,14 @@ async def check_results_node(state: RecommendationState):
         return {"should_fallback": True}
     
     return {"should_fallback": False}
-# 3. Web Search Node (corrected version)
+
 async def query_web_node(state: RecommendationState):
     """Process query with existing Web Search agent"""
     try:
-        # Initialize the existing recommender
+       
         recommender = WebSearchRecommender()
         
-        # Get results using existing recommend method
+       
         result = await recommender.recommend(state['user_query'])
         
         # Format the results to match our multi-agent structure
@@ -179,7 +150,7 @@ async def query_web_node(state: RecommendationState):
             "fallback_used": False
         }
 
-# 4. Compilation Node (updated)
+#compiling all the results
 def compile_results(state: RecommendationState):
     output = {
         "query": state['user_query'],
@@ -205,14 +176,14 @@ def compile_results(state: RecommendationState):
 
 
 
-# Add nodes (ONLY ONCE)
+
 workflow.add_node("gatekeeper", check_prompt_node)
 workflow.add_node("combined_agent", query_combined_agent_node)  # Replaces snowflake and rag nodes
 workflow.add_node("check_results", check_results_node)
 workflow.add_node("web", query_web_node)
 workflow.add_node("compile", compile_results)
 
-# Configure workflow
+
 workflow.set_entry_point("gatekeeper")
 workflow.add_conditional_edges(
     "gatekeeper",
@@ -244,8 +215,8 @@ async def test_workflow(query: str):
         "is_college_related": False,
         "safety_check_passed": False,
         "combined_agent_results": None,
-        "snowflake_results": [],  # Explicitly initialize
-        "rag_results": [],  # Explicitly initialize
+        "snowflake_results": [],  
+        "rag_results": [],  
         "web_results": [],
         "final_output": None,
         "early_response": None,
@@ -272,7 +243,7 @@ if __name__ == "__main__":
             "is_college_related": False,
             "safety_check_passed": False,
             "early_response": None,
-            "combined_agent_results": None,  # Changed
+            "combined_agent_results": None, 
             "web_results": [],
             "final_output": None,
             "fallback_used": False,

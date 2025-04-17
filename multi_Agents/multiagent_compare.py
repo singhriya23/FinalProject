@@ -2,7 +2,6 @@
 from typing import TypedDict, Optional, List, Dict
 from langgraph.graph import StateGraph, END
 import asyncio
-import json
 from multi_Agents.websearch_compare import WebSearchComparisonAgent
 from multi_Agents.gate_agent import CollegeRecommender
 from multi_Agents.college_compare import ComparisonDetector
@@ -22,16 +21,17 @@ class ComparisonState(TypedDict):
     fallback_used: bool
     fallback_message: Optional[str]
 
-# Initialize agents
+#initializing all the agents
 college_recommender = CollegeRecommender()
 comparison_detector = ComparisonDetector()
 web_recommender = WebSearchComparisonAgent()
 
-# Initialize the graph
+
 workflow = StateGraph(ComparisonState)
 
+#node to check the prompt for non college related queries
 async def check_prompt_node(state: ComparisonState):
-    """Gatekeeper node"""
+
     STANDARD_RESPONSE = "Sorry I can't help with that. I specialize in college comparisons."
     
     try:
@@ -56,7 +56,7 @@ async def check_prompt_node(state: ComparisonState):
             "safety_check_passed": False,
             "early_response": STANDARD_RESPONSE
         }
-
+#checking it is a  comparison node
 async def detect_comparison_node(state: ComparisonState):
     """Call external ComparisonDetector"""
     STANDARD_RESPONSE = "Please ask questions related to comparing colleges. Example: 'Compare MIT and Stanford for computer science programs'"
@@ -76,14 +76,14 @@ async def detect_comparison_node(state: ComparisonState):
         "colleges_to_compare": detection_result["colleges"],
         "comparison_aspects": detection_result["comparison_aspects"]
     }
-
+#output from our rag and snowflake agents
 async def query_combined_agent_node(state: ComparisonState):
-    """Combined agent that calls external validation function"""
+
     if not state["is_comparison"]:
         return {"combined_results": None, "fallback_used": False}
     
     try:
-        # Call the imported validation function
+        
         validation_result = compare_validate(state["user_query"])
         
         # Check for empty/None content specifically
@@ -109,8 +109,9 @@ async def query_combined_agent_node(state: ComparisonState):
             "fallback_message": f"Error processing comparison: {str(e)}"
         }
 
+#checking output for fallback trigger
 async def check_results_node(state: ComparisonState):
-    """Check if we need fallback"""
+    
     if not state["is_comparison"]:
         return {"fallback_used": False}
     
@@ -120,8 +121,9 @@ async def check_results_node(state: ComparisonState):
     
     return {"fallback_used": False}
 
+#trigger web agent as a fallback
 async def query_web_node(state: ComparisonState):
-    """Comparison-specific fallback"""
+  
     if not state.get("fallback_used", False):
         return {"web_results": []}
     
@@ -158,7 +160,7 @@ def compile_results(state: ComparisonState):
     }
     return {"final_output": output}
 
-# Add nodes
+
 workflow.add_node("gatekeeper", check_prompt_node)
 workflow.add_node("detect_comparison", detect_comparison_node)
 workflow.add_node("combined_agent", query_combined_agent_node)  # Replaces snowflake and rag nodes
