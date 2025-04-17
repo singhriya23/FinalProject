@@ -5,7 +5,6 @@ from openai import OpenAI
 from pydantic import BaseModel, ValidationError
 
 # Initialize client
-openai_client = OpenAI(api_key="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")
 
 # --- 1. Data Model ---
 class UserProfile(BaseModel):
