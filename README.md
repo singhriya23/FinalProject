@@ -12,6 +12,20 @@ Documents - https://docs.google.com/document/d/1XNpOEtCW3dAiag4ingQZ21Gucrm0qJK-
 
 Codelabs - https://codelabs-preview.appspot.com/?file_id=1XNpOEtCW3dAiag4ingQZ21Gucrm0qJK-vbJEUGaAdHI/#0
 
+File Structure 
+.github/workflows - Github CI/CD Pipelines for github actions
+Airflow/dags - Airflow code for converting to markdown and putting to S3.
+POC- Initial prototyping
+mcp - MCP Logic Implementation
+multi-agents.egg-info - Config Files related to Agents
+multi_Agents - Containes Different Agents
+client.py - client for mcp
+frontend.py - streamlit code
+main.py - FastAPI Backend
+server.py - For MCP Server
+setup.py - setting up agents for the mcp server
+style.css - To Beautify Frontend
+
 ## Architecture Diagram
 
 ![image](https://github.com/user-attachments/assets/5b6ad1f7-0718-4c11-b21b-b234bc05d446)
