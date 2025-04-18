@@ -27,17 +27,39 @@ https://github.com/users/singhriya23/projects/4/views/1
 
 **File Structure** 
 .github/workflows - Github CI/CD Pipelines for github actions
+
+
 Airflow/dags - Airflow code for converting to markdown and putting to S3.
+
+
 POC- Initial prototyping
+
 mcp - MCP Logic Implementation
+
+
 multi-agents.egg-info - Config Files related to Agents
+
+
 multi_Agents - Containes Different Agents
+
+
 client.py - client for mcp
+
+
 frontend.py - streamlit code
+
+
 main.py - FastAPI Backend
+
+
 server.py - For MCP Server
+
+
 setup.py - setting up agents for the mcp server
+
+
 style.css - To Beautify Frontend
+
 
 ![image](https://github.com/user-attachments/assets/b45c75f4-6da4-43c4-8378-f7db7e36fe05)
 
