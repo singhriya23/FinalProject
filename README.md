@@ -13,6 +13,15 @@
 
 **Codelabs** - https://codelabs-preview.appspot.com/?file_id=1rpJwlVCqcSl3usIWlm807q2x4b6J6MDqk6OF6rDCimY/#0
 
+**Contributions**
+
+Kaushik - Data Collection for Structured Data, Snowflake agent, Validator agent - 33%
+
+Arvind - Data Collection for Unstructured Data, RAG agent, DAGS, Deployment - 33%
+
+Riya - MCP, FASTAPI, Streamlit, Web Agent, Profiler Agent, Multi-Agent architecture - 33%
+
+
 **File Structure** 
 .github/workflows - Github CI/CD Pipelines for github actions
 Airflow/dags - Airflow code for converting to markdown and putting to S3.
@@ -101,6 +110,9 @@ The LangGraph flow manages how prompts are routed through different agents (Snow
 ![image](https://github.com/user-attachments/assets/b116d335-2a24-4fcd-b5dc-b696b8f8f76e)
 
 This LangGraph workflow is designed to handle college recommendation queries using a structured, multi-agent decision flow. It starts by verifying whether the user's query is relevant and safe (college-related and appropriate). If valid, it routes the query to a combined agent that aggregates results from Snowflake and RAG systems. If these sources return insufficient data, the system falls back to a web search agent to provide relevant recommendations. Finally, it compiles all gathered data—whether from the core agents or fallback—and returns a structured output. The graph ensures robust handling of edge cases while prioritizing high-quality responses.
+
+## Disclosure
+WE ATTEST THAT WE HAVEN'T USED ANY OTHER STUDENTS' WORK IN OUR ASSIGNMENT AND ABIDE BY THE POLICIES LISTED IN THE STUDENT HANDBOOK
 
 ## AI Disclosure
 
