@@ -94,6 +94,8 @@ The LangGraph flow manages how prompts are routed through different agents (Snow
 
 ![image](https://github.com/user-attachments/assets/b116d335-2a24-4fcd-b5dc-b696b8f8f76e)
 
+This LangGraph workflow is designed to handle college recommendation queries using a structured, multi-agent decision flow. It starts by verifying whether the user's query is relevant and safe (college-related and appropriate). If valid, it routes the query to a combined agent that aggregates results from Snowflake and RAG systems. If these sources return insufficient data, the system falls back to a web search agent to provide relevant recommendations. Finally, it compiles all gathered data—whether from the core agents or fallback—and returns a structured output. The graph ensures robust handling of edge cases while prioritizing high-quality responses.
+
 ## AI Disclosure
 
 
