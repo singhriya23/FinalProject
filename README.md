@@ -52,35 +52,35 @@ You’ll be greeted by a clean Streamlit interface with a prompt box and submit 
 2. Enter a Prompt
 Type in a natural language query. Here are some examples:
 
-💡 “Recommend CS colleges with tuition under $40,000”
+  💡 “Recommend CS colleges with tuition under $40,000”
 
-💡 “Compare Stanford and MIT for Artificial Intelligence programs”
+  💡 “Compare Stanford and MIT for Artificial Intelligence programs”
 
-💡 “What are the top 5 Data Science programs in the US?”
+  💡 “What are the top 5 Data Science programs in the US?”
 
-💡 “Where does Carnegie Mellon rank globally for AI?”
+  💡 “Where does Carnegie Mellon rank globally for AI?”
 
-💡 “Do any California colleges offer faculty-led AI research?”
+  💡 “Do any California colleges offer faculty-led AI research?”
 
 3. Submit and Wait
-Click the "Submit" button. The app will:
+ Click the "Submit" button. The app will:
 
-Route your query to the appropriate AI agents
+ Route your query to the appropriate AI agents
 
-Process your request through structured (Snowflake), unstructured (Pinecone), or fallback (web search) pipelines
+ Process your request through structured (Snowflake), unstructured (Pinecone), or fallback (web search) pipelines
 
-Use LLMs to summarize and format the answer
+ Use LLMs to summarize and format the answer
 
 4. View the Results
-You’ll see a personalized answer that may include:
+  You’ll see a personalized answer that may include:
 
-Recommended colleges with key metrics
+  Recommended colleges with key metrics
 
-A side-by-side comparison table
+  A side-by-side comparison table
 
 Global ranking data (if requested)
 
-Web-sourced content if no internal data matches
+  Web-sourced content if no internal data matches
 
 5. Export the Report
 Optional: Download the results as a .txt file or Google Colab notebook (coming soon).
