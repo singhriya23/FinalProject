@@ -1,0 +1,34 @@
+FROM python:3.12.4
+
+WORKDIR /app
+COPY . .
+
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Explicitly install sentence-transformers
+RUN pip install --no-cache-dir sentence-transformers
+
+RUN pip install --no-cache-dir \
+    pandas \
+    snowflake-connector-python \
+    matplotlib \
+    langchain-openai \
+    openai \
+    mcp \
+    openai-agents\
+    google-cloud-storage
+
+# Copy app code and credentials
+
+
+# Handle pinecone cleanup and reinstallation
+RUN pip uninstall -y pinecone pinecone-client pinecone-plugin-inference || true
+RUN pip install --no-cache-dir "pinecone-client>=3.0.0,<4.0.0"
+# Set Google credentials
+
+
+EXPOSE 8080
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
