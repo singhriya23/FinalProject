@@ -122,7 +122,11 @@ WE ATTEST THAT WE HAVEN'T USED ANY OTHER STUDENTS' WORK IN OUR ASSIGNMENT AND AB
 
 ## AI Disclosure
 
-
+We have use LLM tools for various purposes in our project
+--Learn about mcp and its implementation
+--For code deugging purposes
+--For understanding the gaps in our project
+--Enhance our project 
 
 
 
