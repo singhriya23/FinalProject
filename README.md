@@ -21,6 +21,9 @@ Arvind - Data Collection for Unstructured Data, RAG agent, DAGS, Deployment - 33
 
 Riya - MCP, FASTAPI, Streamlit, Web Agent, Profiler Agent, Multi-Agent architecture - 33%
 
+GITHUB TASKS-
+https://github.com/users/singhriya23/projects/4/views/1
+
 
 **File Structure** 
 .github/workflows - Github CI/CD Pipelines for github actions
