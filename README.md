@@ -10,7 +10,7 @@ https://northeastern-my.sharepoint.com/:p:/r/personal/singh_riya2_northeastern_e
 
 **Documents** - https://docs.google.com/document/d/1XNpOEtCW3dAiag4ingQZ21Gucrm0qJK-vbJEUGaAdHI/edit?tab=t.0#heading=h.fuhcqjxfqwun
 
-**Codelabs** - https://codelabs-preview.appspot.com/?file_id=1XNpOEtCW3dAiag4ingQZ21Gucrm0qJK-vbJEUGaAdHI/#0
+**Codelabs** - https://codelabs-preview.appspot.com/?file_id=1rpJwlVCqcSl3usIWlm807q2x4b6J6MDqk6OF6rDCimY/#0
 
 **File Structure** 
 .github/workflows - Github CI/CD Pipelines for github actions
