@@ -1,0 +1,39 @@
+name: Build & Tag Docker Image on Dockerfile Change
+
+on:
+  push:
+    paths:
+      - Dockerfile
+      - requirements.txt
+    branches:
+      - main
+
+jobs:
+  build-and-tag:
+    name: Build and Tag Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+    - name:  Checkout Code
+      uses: actions/checkout@v3
+
+    - name:  Authenticate to Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: Set up gcloud CLI
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+    - name:  Configure Docker to use gcloud
+      run: |
+        gcloud auth configure-docker us-central1-docker.pkg.dev
+
+    - name: Build and Tag Docker Image
+      run: |
+        docker buildx build \
+          --platform=linux/amd64 \
+          -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/agent-repo/fastapi-agent:latest \
+          --load .
