@@ -30,5 +30,19 @@ style.css - To Beautify Frontend
 
 ![image](https://github.com/user-attachments/assets/5b6ad1f7-0718-4c11-b21b-b234bc05d446)
 
+## Langgraph Flow
+
+The LangGraph flow manages how prompts are routed through different agents (Snowflake, RAG, Web), using decision nodes and fallback mechanisms to ensure that the system always responds appropriately.
+
+![image](https://github.com/user-attachments/assets/4b7e0caa-ada5-42eb-8290-770835e8659c)
+
+![image](https://github.com/user-attachments/assets/b116d335-2a24-4fcd-b5dc-b696b8f8f76e)
+
+## AI Disclosure
+
+
+
+
+
 
 
