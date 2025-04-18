@@ -5,6 +5,8 @@
 
 **Deployed Backend** - https://final-project-deploy-343736309329.us-central1.run.app
 
+**Video Recording** - https://northeastern-my.sharepoint.com/:v:/g/personal/lnu_kau_northeastern_edu/EQ10Gx0M-YtFnhPXxCtMki8BoFkxfSyjvEhiiXUYR2eokg
+
 ## PowerPoint Presentation
 https://northeastern-my.sharepoint.com/:p:/r/personal/singh_riya2_northeastern_edu/_layouts/15/Doc.aspx?sourcedoc=%7BC99D127B-A2F3-44E4-BCC0-055715F9247A%7D&file=FinalProjectProposal.pptx&wdOrigin=TEAMS-MAGLEV.p2p_ns.rwc&action=edit&mobileredirect=true
 
@@ -84,6 +86,11 @@ Global ranking data (if requested)
 
 5. Export the Report
 Optional: Download the results as a .txt file or Google Colab notebook (coming soon).
+
+## Run the Application
+
+1) Please run the main.py file using the command uvicorn main:app --reload
+2) Next, open a new terminal window in the working directory and run the frontend.py file using the command streamlit run frontend.py
 
 
 ## Langgraph Flow
