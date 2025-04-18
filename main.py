@@ -14,6 +14,7 @@ from agents.mcp import MCPServerStdio
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
+from multi_Agents.app_deadline import process_deadline_query
 
 load_dotenv()
 app = FastAPI()
@@ -278,5 +279,33 @@ async def get_university_ranking(request: RankingRequest):
                 "success": False,
                 "error": str(e),
                 "message": "Failed to process ranking request"
+            }
+        )
+
+class DeadlineQuery(BaseModel):
+    question: str
+
+@app.post("/deadline")
+async def get_application_deadline(query: DeadlineQuery):
+    """
+    Simple endpoint to look up college application deadlines.
+    Example calls:
+    - {"question": "What is MIT's deadline"}
+    - {"question": "When is Harvard's application due"}
+    """
+    try:
+        response = process_deadline_query(query.question)
+        return {
+            "success": True,
+            "question": query.question,
+            "response": response
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": str(e),
+                "message": "Failed to process deadline request"
             }
         )

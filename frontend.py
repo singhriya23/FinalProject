@@ -5,8 +5,8 @@ import json
 from io import StringIO
 from datetime import datetime
 # Config
-BACKEND_URL = "https://final-project-deploy-343736309329.us-central1.run.app"
-
+BACKEND_URL = "http://localhost:8000"
+#BACKEND_URL = "https://final-project-deploy-343736309329.us-central1.run.app"
 def local_css(file_name):
     with open(file_name) as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -165,6 +165,23 @@ def display_conversation_history():
                             ]
                             st.rerun()
 
+def get_college_deadline(college_name: str):
+    """Fetch application deadline for a specific college"""
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/deadline",
+            json={"question": f"When is {college_name}'s application due?"},
+            headers={"Content-Type": "application/json"}
+        )
+        response.raise_for_status()  # Raise exception for bad status codes
+        data = response.json()
+        if data.get("success"):
+            return data["response"]
+        return data.get("message", "Deadline not available")
+    except Exception as e:
+        print(f"Error fetching deadline: {e}")
+        return "Could not retrieve deadline"
+
 
 def generate_report(messages):
     """Generates a clean text report from messages"""
@@ -305,20 +322,23 @@ def college_recommender_page():
                 st.error(f"Failed to create new session: {str(e)}")
         
         st.markdown("---")
-        st.markdown("<h3 style='color: white;'>Saved Conversations</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: white;'>Saved Recommendations</h3>", unsafe_allow_html=True)
         
         if not st.session_state.get('conversations', []):
-            st.info("No saved conversations yet")
+            st.info("No saved recommendations yet")
         else:
             for conv in st.session_state.conversations:
+                # Use custom name if available, otherwise use timestamp
+                display_name = conv.get('name', conv['timestamp'])
+                
                 # Get first user message or default text
                 first_msg = next(
                     (m['content'] for m in conv['messages'] if m['role'] == 'user'),
-                    "Saved conversation"
+                    "Saved recommendation"
                 )
                 
                 # Display each saved conversation with options
-                with st.expander(f"🗓️ {conv['timestamp']}"):
+                with st.expander(f"📁 {display_name}"):
                     st.markdown(f"<p style='color: white; font-size: 0.8rem;'>{first_msg[:50] + ('...' if len(first_msg) > 50 else '')}</p>", unsafe_allow_html=True)
                     col1, col2 = st.columns([3, 1])
                     with col1:
@@ -329,8 +349,41 @@ def college_recommender_page():
                         if st.button("❌", key=f"delete_{conv['id']}"):
                             st.session_state.conversations = [
                                 c for c in st.session_state.conversations 
-                                if c['id'] != conv['id']]
+                                if c['id'] != conv['id']
+                            ]
                             st.rerun()
+        
+        st.markdown("---")   
+        st.markdown("<h3 style='color: white;'>College Deadline Lookup</h3>", unsafe_allow_html=True)
+
+        # Deadline lookup widget
+        college_for_deadline = st.text_input(
+            "Check application deadline:",
+            placeholder="Enter college name (e.g. MIT)",
+            key="deadline_lookup",
+            label_visibility="collapsed"
+        )
+
+        if college_for_deadline:
+            with st.spinner(f"Checking {college_for_deadline}'s deadline..."):
+                try:
+                    response = requests.post(
+                        f"{BACKEND_URL}/deadline",
+                        json={"question": f"When is {college_for_deadline}'s application due?"},
+                        headers={"Content-Type": "application/json"}
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    if data.get("success"):
+                        st.info(data["response"])
+                    else:
+                        st.error(data.get("message", "Deadline not available"))
+                except requests.exceptions.HTTPError as http_err:
+                    st.error(f"HTTP error occurred: {http_err}")
+                except Exception as e:
+                    st.error(f"Failed to fetch deadline: {str(e)}")
+                    
+        
 
     # Initialize session if needed
     if not st.session_state.session_id:
@@ -356,14 +409,15 @@ def college_recommender_page():
             elif msg["role"] == "assistant":
                 if msg.get("result"):
                     response_content = display_pure_response(msg["result"])
-                    st.markdown(response_content)  # Use markdown for better formatting
+                    st.markdown(response_content)
                 else:
                     st.write(msg["content"])
                 
-                # Action buttons
+                # Action buttons for assistant responses
                 if msg["role"] == "assistant":
-                    col1, col2 = st.columns([1, 1])
-                    with col1:
+                    cols = st.columns([1, 1, 2])
+                    
+                    with cols[0]:  # Download button
                         if st.button(f"📥 Download", key=f"download_{i}"):
                             download_content = generate_report([msg])
                             st.download_button(
@@ -373,18 +427,45 @@ def college_recommender_page():
                                 mime="text/plain",
                                 key=f"real_download_{i}"
                             )
-                    with col2:
+                    
+                    with cols[1]:  # Save button
                         if st.button(f"💾 Save", key=f"save_{i}"):
-                            new_conv = {
-                                'id': len(st.session_state.conversations) + 1,
-                                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                'messages': [m.copy() for m in st.session_state.messages]
-                            }
-                            if 'conversations' not in st.session_state:
-                                st.session_state.conversations = []
-                            st.session_state.conversations.append(new_conv)
-                            st.toast("Conversation saved!", icon="✅")
-                            st.rerun()
+                            st.session_state.save_dialog_open = True
+                            st.session_state.save_dialog_for = i
+
+                    # Streamlit-native modal dialog
+                    if st.session_state.get('save_dialog_open') and st.session_state.get('save_dialog_for') == i:
+                        with st.form(key=f"save_form_{i}"):
+                            save_name = st.text_input(
+                                "Enter a name for this conversation:",
+                                value=f"College Recommendations {datetime.now().strftime('%Y-%m-%d')}",
+                                key=f"save_name_input_{i}"
+                            )
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.form_submit_button("Save"):
+                                    if not save_name.strip():
+                                        st.warning("Please enter a name")
+                                    else:
+                                        new_conv = {
+                                            'id': len(st.session_state.conversations) + 1,
+                                            'name': save_name.strip(),
+                                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                            'messages': [m.copy() for m in st.session_state.messages]
+                                        }
+                                        
+                                        if 'conversations' not in st.session_state:
+                                            st.session_state.conversations = []
+                                        
+                                        st.session_state.conversations.append(new_conv)
+                                        st.session_state.save_dialog_open = False
+                                        st.toast(f"Saved as '{save_name}'")
+                                        st.rerun()
+                            with col2:
+                                if st.form_submit_button("Cancel"):
+                                    st.session_state.save_dialog_open = False
+                                    st.rerun()
 
     # Handle new user input
     if prompt := st.chat_input("Ask about colleges..."):
