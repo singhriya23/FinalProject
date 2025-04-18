@@ -5,7 +5,7 @@
 
 **Deployed Backend** - https://final-project-deploy-343736309329.us-central1.run.app
 
-**Video Recording** - https://northeastern-my.sharepoint.com/:v:/g/personal/lnu_kau_northeastern_edu/EQ10Gx0M-YtFnhPXxCtMki8BoFkxfSyjvEhiiXUYR2eokg
+**Video Recording** - https://northeastern-my.sharepoint.com/:v:/r/personal/lnu_kau_northeastern_edu/Documents/Recordings/Meeting%20in%20BIG%20DATA-20250418_124204-Meeting%20Recording.mp4?csf=1&web=1&e=AuoubA&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAiLCJyZWZlcnJhbFZpZXciOiJTaGFyZURpYWxvZy1MaW5rIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXcifX0%3D
 
 **PowerPoint Presentation** - https://northeastern-my.sharepoint.com/:p:/r/personal/singh_riya2_northeastern_edu/_layouts/15/Doc.aspx?sourcedoc=%7BC99D127B-A2F3-44E4-BCC0-055715F9247A%7D&file=FinalProjectProposal.pptx&wdOrigin=TEAMS-MAGLEV.p2p_ns.rwc&action=edit&mobileredirect=true
 
