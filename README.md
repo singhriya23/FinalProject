@@ -89,8 +89,8 @@ Optional: Download the results as a .txt file or Google Colab notebook (coming s
 
 ## Run the Application
 
-1) Please run the main.py file using the command uvicorn main:app --reload
-2) Next, open a new terminal window in the working directory and run the frontend.py file using the command streamlit run frontend.py
+1) Please run the main.py file using the command (uvicorn main:app --reload)
+2) Next, open a new terminal window in the working directory and run the frontend.py file using the command (streamlit run frontend.py)
 
 
 ## Langgraph Flow
