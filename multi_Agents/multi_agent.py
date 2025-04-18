@@ -13,40 +13,58 @@ load_dotenv()
 class RecommendationState(TypedDict):
     user_query: str
     is_college_related: bool
+    is_comparison_query: bool  # New field
     safety_check_passed: bool
     combined_agent_results: Optional[str]
-    snowflake_results: List[Dict]  # Add this
-    rag_results: List[Dict]  # Add this
+    snowflake_results: List[Dict]
+    rag_results: List[Dict]
     web_results: List[Dict]
     final_output: Optional[Dict]
     early_response: Optional[str]
     fallback_used: Optional[bool]
     fallback_message: Optional[str]
 
-
-
-
 workflow = StateGraph(RecommendationState)
-
 
 college_recommender = CollegeRecommender()
 
-#node to check the prompt for non college related queries
-async def check_prompt_node(state: RecommendationState):
+async def detect_comparison_node(state: RecommendationState):
+    """New node to detect comparison queries"""
+    STANDARD_RESPONSE = "I specialize in college recommendations, not comparisons. Please ask about specific programs or colleges."
+    
+    # Simple keyword-based detection (you could replace with LLM-based detection)
+    comparison_keywords = ["compare", "vs", "versus", "difference", "better", "worse", "ranking"]
+    
+    query_lower = state['user_query'].lower()
+    is_comparison = any(keyword in query_lower for keyword in comparison_keywords)
+    
+    print(f"\n🔍 Comparison check for: '{state['user_query']}'")
+    print(f"Comparison detected: {is_comparison}")
+    
+    return {
+        "is_comparison_query": is_comparison,
+        "early_response": STANDARD_RESPONSE if is_comparison else None
+    }
 
+async def check_prompt_node(state: RecommendationState):
     STANDARD_RESPONSE = "Sorry I can't do that. I can assist you with college recommendations."
     
     print(f"\n🔍 Processing query: '{state['user_query']}'")
     
+    # Skip classification if already identified as comparison
+    if state.get('is_comparison_query', False):
+        return {
+            "is_college_related": False,
+            "safety_check_passed": False,
+            "early_response": state.get('early_response', STANDARD_RESPONSE)
+        }
+    
     classification = await college_recommender.check_and_classify_query(state['user_query'])
     
-    # Debug print the classification results
     print(f"📊 Classification results:")
     print(f"  - is_college_related: {classification['is_college_related']}")
     print(f"  - safety_check_passed: {classification['safety_check_passed']}")
     print(f"  - context: {classification['context']}")
-    if 'response' in classification:
-        print(f"  - response: {classification['response']}")
     
     if classification["context"] != "college":
         print("❌ Query rejected (not college-related or failed safety check)")
@@ -177,27 +195,41 @@ def compile_results(state: RecommendationState):
 
 
 
+# Modified workflow construction
+workflow.add_node("detect_comparison", detect_comparison_node)
 workflow.add_node("gatekeeper", check_prompt_node)
-workflow.add_node("combined_agent", query_combined_agent_node)  # Replaces snowflake and rag nodes
+workflow.add_node("combined_agent", query_combined_agent_node)
 workflow.add_node("check_results", check_results_node)
 workflow.add_node("web", query_web_node)
 workflow.add_node("compile", compile_results)
 
+workflow.set_entry_point("detect_comparison")
 
-workflow.set_entry_point("gatekeeper")
+# First decision point - is this a comparison?
+workflow.add_conditional_edges(
+    "detect_comparison",
+    lambda state: "early_exit" if state.get("is_comparison_query", False) else "gatekeeper",
+    {
+        "early_exit": END,
+        "gatekeeper": "gatekeeper"
+    }
+)
+
+# Original flow continues
 workflow.add_conditional_edges(
     "gatekeeper",
     lambda state: (
         "early_exit" 
         if not state["is_college_related"] or not state["safety_check_passed"] 
-        else "continue_processing"
+        else "combined_agent"
     ),
     {
         "early_exit": END,
-        "continue_processing": "combined_agent"  # Goes directly to combined agent now
+        "combined_agent": "combined_agent"
     }
 )
-workflow.add_edge("combined_agent", "check_results")  # CHANGED - no more rag node
+
+workflow.add_edge("combined_agent", "check_results")
 workflow.add_conditional_edges(
     "check_results",
     lambda state: "web" if state.get("should_fallback", False) else "compile",
