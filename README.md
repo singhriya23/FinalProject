@@ -39,85 +39,8 @@ server.py - For MCP Server
 setup.py - setting up agents for the mcp server
 style.css - To Beautify Frontend
 
-├── Airflow
-│   └── dags
-│       └── pinecone_to_md_to_s3.py
-├── DockerFile
-├── POC
-│   ├── Chroma_DB_Indexing.py
-│   ├── Rag_Agent.py
-│   ├── RecommenderRAG_3.py
-│   ├── ValidationLogic.py
-│   ├── combined_validator.py
-│   ├── final_compare_validator.py
-│   ├── final_recommend_validator.py
-│   ├── profilerAgent.py
-│   ├── recommendation_validator.py
-│   ├── validator.py
-│   └── validatoragent_v2.py
-├── README.md
-├── __pycache__
-│   └── main.cpython-313.pyc
-├── client.py
-├── frontend.py
-├── main.py
-├── mcp
-│   ├── test.py
-│   └── test_profile.py
-├── multi_Agents
-│   ├── RecommenderRAG_4.py
-│   ├── __init__.py
-│   ├── __pycache__
-│   │   ├── RecommenderRAG_3.cpython-313.pyc
-│   │   ├── RecommenderRAG_4.cpython-313.pyc
-│   │   ├── __init__.cpython-313.pyc
-│   │   ├── app_deadline.cpython-313.pyc
-│   │   ├── college_compare.cpython-313.pyc
-│   │   ├── compareRAG.cpython-313.pyc
-│   │   ├── compare_snowflake.cpython-313.pyc
-│   │   ├── compare_validator.cpython-313.pyc
-│   │   ├── final_compare_validator.cpython-313.pyc
-│   │   ├── gate_agent.cpython-313.pyc
-│   │   ├── integrated_validator.cpython-313.pyc
-│   │   ├── multi_agent.cpython-313.pyc
-│   │   ├── multiagent_compare.cpython-313.pyc
-│   │   ├── recommendation_snowflake.cpython-313.pyc
-│   │   ├── validate_recommender.cpython-313.pyc
-│   │   ├── websearch_agent.cpython-313.pyc
-│   │   └── websearch_compare.cpython-313.pyc
-│   ├── app_deadline.py
-│   ├── college_compare.py
-│   ├── compareRAG.py
-│   ├── compare_snowflake.py
-│   ├── gate_agent.py
-│   ├── integrated_validator.py
-│   ├── multi_agent.py
-│   ├── multiagent_compare.py
-│   ├── recommendation_snowflake.py
-│   ├── test.py
-│   ├── validate_recommender.py
-│   ├── websearch_agent.py
-│   └── websearch_compare.py
-├── multi_Agents.egg-info
-│   ├── PKG-INFO
-│   ├── SOURCES.txt
-│   ├── dependency_links.txt
-│   └── top_level.txt
-├── newintent
-│   ├── __init__.py
-│   ├── __pycache__
-│   │   ├── __init__.cpython-313.pyc
-│   │   ├── dynamic_handler.cpython-313.pyc
-│   │   └── safety_system.cpython-313.pyc
-│   ├── dynamic_handler.py
-│   ├── safety_system.py
-│   └── test.py
-├── requirements.txt
-├── server.py
-├── setup.py
-└── style.css
+![image](https://github.com/user-attachments/assets/b45c75f4-6da4-43c4-8378-f7db7e36fe05)
 
-11 directories, 67 files
 
 ## Architecture Diagram
 
