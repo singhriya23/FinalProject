@@ -35,5 +35,5 @@ jobs:
       run: |
         docker buildx build \
           --platform=linux/amd64 \
-          -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/agent-repo/fastapi-agent:latest \
+          -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/agent-repo/final-project-deployment:latest \
           --load .
